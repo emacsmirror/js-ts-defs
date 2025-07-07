@@ -36,7 +36,7 @@
   "Extract JavaScript definitions from ROOT-NODE using tree-sitter.
 ROOT-NODE should be a tree-sitter root node.
 Returns a nested scope structure with variable definitions."
-  (let ((scope (js-ts-defs--build-scope "file"
+  (let ((scope (js-ts-defs--build-scope "program"
                                         (treesit-node-start root-node)
                                         (treesit-node-end root-node))))
     (js-ts-defs--process-node root-node scope)
@@ -44,7 +44,7 @@ Returns a nested scope structure with variable definitions."
 
 (defun js-ts-defs--build-scope (scope-type start-pos end-pos)
   "Build a scope structure of SCOPE-TYPE with START-POS and END-POS.
-SCOPE-TYPE can be `file', `function', etc."
+SCOPE-TYPE can be `program', `function', etc."
   (list :type scope-type
         :start start-pos
         :end end-pos
