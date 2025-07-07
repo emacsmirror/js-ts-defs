@@ -70,6 +70,14 @@ SCOPE-TYPE can be `file', `function', etc."
 
 (defun js-ts-defs--process-function (node scope)
   "Process a function NODE, creating a new child scope."
+  ;; For function_declaration, add the function name to the current scope
+  (when (string= (treesit-node-type node) "function_declaration")
+    (let ((name-node (treesit-node-child-by-field-name node "name")))
+      (when (and name-node (string= (treesit-node-type name-node) "identifier"))
+        (let ((name (substring-no-properties (treesit-node-text name-node)))
+              (pos (treesit-node-start name-node)))
+          (js-ts-defs--add-variable scope name pos)))))
+
   (let* ((function-scope (js-ts-defs--build-scope "function"))
          (parameters (js-ts-defs--get-function-parameters node)))
 
