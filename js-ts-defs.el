@@ -53,7 +53,7 @@ SCOPE-TYPE can be `program', `function', etc."
 
 (defun js-ts-defs--process-node (node function-scope block-scope)
   "Process NODE and add definitions to appropriate scopes.
-FUNCTION-SCOPE is the enclosing function/program scope for variable declarations.
+FUNCTION-SCOPE is the enclosing function/program scope for var declarations.
 BLOCK-SCOPE is the current block scope for lexical declarations."
   (let ((node-type (treesit-node-type node)))
     (cond
@@ -141,7 +141,7 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
           (append (plist-get parent-block-scope :children) (list function-scope)))))
 
 (defun js-ts-defs--process-variable-declaration (node function-scope block-scope)
-  "Process a variable declaration NODE and add variables to FUNCTION-SCOPE."
+  "Process a variable declaration NODE (var) and add variables to FUNCTION-SCOPE."
   (let ((declarators (treesit-node-children node)))
     (dolist (child declarators)
       (when (string= (treesit-node-type child) "variable_declarator")
@@ -191,7 +191,7 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
       (puthash name position variables))))
 
 (defun js-ts-defs--process-statement-block (node function-scope block-scope)
-  "Process a statement block NODE, creating a block scope if it contains lexical declarations."
+  "Process a statement block NODE, creating a block scope if needed."
   (let ((children (treesit-node-children node))
         (has-lexical-declaration nil))
 
@@ -215,7 +215,7 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
         (js-ts-defs--process-node child function-scope block-scope)))))
 
 (defun js-ts-defs--process-catch-clause (node _function-scope block-scope)
-  "Process a catch clause NODE, unconditionally creating a new block scope."
+  "Process a catch clause NODE, creating a new block scope."
   (let ((parameter (treesit-node-child-by-field-name node "parameter"))
         (body (treesit-node-child-by-field-name node "body"))
         (catch-scope (js-ts-defs--build-scope "block"
@@ -242,7 +242,7 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
           (append (plist-get block-scope :children) (list catch-scope)))))
 
 (defun js-ts-defs--process-for-statement (node function-scope block-scope)
-  "Process a for statement NODE, creating a block scope if it contains lexical declarations."
+  "Process a for statement NODE, creating a block scope if needed."
   (let ((initializer (treesit-node-child-by-field-name node "initializer"))
         (condition (treesit-node-child-by-field-name node "condition"))
         (update (treesit-node-child-by-field-name node "update"))
@@ -285,7 +285,7 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
           (js-ts-defs--process-node body function-scope block-scope))))))
 
 (defun js-ts-defs--process-for-in-statement (node function-scope block-scope)
-  "Process a for in statement NODE, creating a block scope if it contains lexical declarations."
+  "Process a for in statement NODE, creating a block scope if needed."
   (let ((kind (treesit-node-child-by-field-name node "kind"))
         (left (treesit-node-child-by-field-name node "left"))
         (right (treesit-node-child-by-field-name node "right"))
@@ -349,7 +349,7 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
   (js-ts-defs--process-children node function-scope block-scope))
 
 (defun js-ts-defs--process-import-statement (node function-scope block-scope)
-  "Process an import statement NODE, adding imported variables to block scope."
+  "Process an import statement NODE, adding imports to block scope."
   (let ((import-clause (treesit-node-child node 1)))
     (when import-clause
       (js-ts-defs--process-import-clause import-clause block-scope)))
@@ -358,7 +358,7 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
   (js-ts-defs--process-children node function-scope block-scope))
 
 (defun js-ts-defs--process-import-clause (node block-scope)
-  "Process an import clause NODE, adding imported variables to block scope."
+  "Process an import clause NODE, adding imports to block scope."
   (let ((children (treesit-node-children node)))
     (dolist (child children)
       (let ((node-type (treesit-node-type child)))
@@ -391,8 +391,7 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
                       (js-ts-defs--add-variable block-scope name pos)))))))))))))
 
 (defun js-ts-defs--extract-identifiers-from-pattern (node)
-  "Extract all identifier names and positions from a parameter pattern NODE.
-Handles identifier, rest_pattern, object_pattern, and array_pattern recursively."
+  "Extract identifier names and positions from pattern NODE."
   (let ((node-type (treesit-node-type node))
         (identifiers '()))
     (cond
