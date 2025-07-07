@@ -108,7 +108,11 @@ SCOPE-TYPE can be `file', `function', etc."
           (when (and identifier (string= (treesit-node-type identifier) "identifier"))
             (let ((name (substring-no-properties (treesit-node-text identifier)))
                   (pos (treesit-node-start identifier)))
-              (js-ts-defs--add-variable scope name pos))))))))
+              (js-ts-defs--add-variable scope name pos))))
+        ;; Process the value part of the declaration if it exists
+        (let ((value (treesit-node-child-by-field-name child "value")))
+          (when value
+            (js-ts-defs--process-node value scope)))))))
 
 (defun js-ts-defs--process-lexical-declaration (node scope)
   "Process a lexical declaration NODE (let/const) and add variables to SCOPE."
@@ -119,7 +123,11 @@ SCOPE-TYPE can be `file', `function', etc."
           (when (and identifier (string= (treesit-node-type identifier) "identifier"))
             (let ((name (substring-no-properties (treesit-node-text identifier)))
                   (pos (treesit-node-start identifier)))
-              (js-ts-defs--add-variable scope name pos))))))))
+              (js-ts-defs--add-variable scope name pos))))
+        ;; Process the value part of the declaration if it exists
+        (let ((value (treesit-node-child-by-field-name child "value")))
+          (when value
+            (js-ts-defs--process-node value scope)))))))
 
 (defun js-ts-defs--get-function-parameters (node)
   "Extract parameter names and positions from function NODE."
