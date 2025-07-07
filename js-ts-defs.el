@@ -36,14 +36,18 @@
   "Extract JavaScript definitions from ROOT-NODE using tree-sitter.
 ROOT-NODE should be a tree-sitter root node.
 Returns a nested scope structure with variable definitions."
-  (let ((scope (js-ts-defs--build-scope "file")))
+  (let ((scope (js-ts-defs--build-scope "file"
+                                        (treesit-node-start root-node)
+                                        (treesit-node-end root-node))))
     (js-ts-defs--process-node root-node scope)
     scope))
 
-(defun js-ts-defs--build-scope (scope-type)
-  "Build a scope structure from NODE of SCOPE-TYPE.
+(defun js-ts-defs--build-scope (scope-type start-pos end-pos)
+  "Build a scope structure of SCOPE-TYPE with START-POS and END-POS.
 SCOPE-TYPE can be `file', `function', etc."
   (list :type scope-type
+        :start start-pos
+        :end end-pos
         :variables (make-hash-table :test 'equal)
         :children '()))
 
@@ -71,7 +75,9 @@ SCOPE-TYPE can be `file', `function', etc."
 (defun js-ts-defs--process-function (node scope)
   "Process a function NODE, creating a new child scope."
   (let* ((node-type (treesit-node-type node))
-         (function-scope (js-ts-defs--build-scope "function"))
+         (function-scope (js-ts-defs--build-scope "function"
+                                                  (treesit-node-start node)
+                                                  (treesit-node-end node)))
          (parameters (js-ts-defs--get-function-parameters node)))
 
     ;; Handle function names based on node type
@@ -97,7 +103,8 @@ SCOPE-TYPE can be `file', `function', etc."
         (js-ts-defs--process-node body function-scope)))
 
     ;; Add the function scope as a child of the current scope
-    (push function-scope (plist-get scope :children))))
+    (setf (plist-get scope :children)
+          (append (plist-get scope :children) (list function-scope)))))
 
 (defun js-ts-defs--process-variable-declaration (node scope)
   "Process a variable declaration NODE and add variables to SCOPE."
