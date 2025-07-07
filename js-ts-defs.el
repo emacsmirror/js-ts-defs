@@ -60,7 +60,8 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
      ;; Function declarations create new scopes
      ((or (string= node-type "function_declaration")
           (string= node-type "function_expression")
-          (string= node-type "arrow_function"))
+          (string= node-type "arrow_function")
+          (string= node-type "class_declaration"))
       (js-ts-defs--process-function node function-scope block-scope))
 
      ;; Variable declarations go to function scope
@@ -97,8 +98,9 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
         (let ((name (substring-no-properties (treesit-node-text name-node)))
               (pos (treesit-node-start name-node)))
           (cond
-           ;; For function_declaration, add name to parent block scope
-           ((string= node-type "function_declaration")
+           ;; For function_declaration and class_declaration, add name to parent block scope
+           ((or (string= node-type "function_declaration")
+                (string= node-type "class_declaration"))
             (js-ts-defs--add-variable parent-block-scope name pos))
            ;; For function_expression, add name to function's own scope
            ((string= node-type "function_expression")
