@@ -92,7 +92,7 @@ SCOPE-TYPE can be `file', `function', etc."
       (when (string= (treesit-node-type child) "variable_declarator")
         (let ((identifier (treesit-node-child child 0)))
           (when (and identifier (string= (treesit-node-type identifier) "identifier"))
-            (let ((name (treesit-node-text identifier))
+            (let ((name (substring-no-properties (treesit-node-text identifier)))
                   (pos (treesit-node-start identifier)))
               (js-ts-defs--add-variable scope name pos))))))))
 
@@ -103,7 +103,7 @@ SCOPE-TYPE can be `file', `function', etc."
       (when (string= (treesit-node-type child) "variable_declarator")
         (let ((identifier (treesit-node-child child 0)))
           (when (and identifier (string= (treesit-node-type identifier) "identifier"))
-            (let ((name (treesit-node-text identifier))
+            (let ((name (substring-no-properties (treesit-node-text identifier)))
                   (pos (treesit-node-start identifier)))
               (js-ts-defs--add-variable scope name pos))))))))
 
@@ -115,7 +115,7 @@ SCOPE-TYPE can be `file', `function', etc."
       (let ((param-nodes (treesit-node-children formal-params)))
         (dolist (param-node param-nodes)
           (when (string= (treesit-node-type param-node) "identifier")
-            (let ((name (treesit-node-text param-node))
+            (let ((name (substring-no-properties (treesit-node-text param-node)))
                   (pos (treesit-node-start param-node)))
               (push (cons name pos) params))))))
     (nreverse params)))
