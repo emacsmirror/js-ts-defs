@@ -61,7 +61,8 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
      ((or (string= node-type "function_declaration")
           (string= node-type "function_expression")
           (string= node-type "arrow_function")
-          (string= node-type "class_declaration"))
+          (string= node-type "class_declaration")
+          (string= node-type "method_definition"))
       (js-ts-defs--process-function node function-scope block-scope))
 
      ;; Variable declarations go to function scope
