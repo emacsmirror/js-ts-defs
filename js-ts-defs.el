@@ -453,6 +453,55 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
     (dolist (child children)
       (js-ts-defs--process-node child function-scope block-scope))))
 
+(defun js-ts-defs-find-definition (scope identifier position)
+  "Find definition of IDENTIFIER at POSITION within SCOPE.
+Returns the position of the definition, or nil if not found.
+Searches from innermost to outermost scope."
+  (catch 'found
+    ;; First check if we're inside any child scopes
+    (dolist (child-scope (plist-get scope :children))
+      (when (and (>= position (plist-get child-scope :start))
+                 (<= position (plist-get child-scope :end)))
+        (let ((result (js-ts-defs-find-definition child-scope identifier position)))
+          (when result
+            (throw 'found result)))))
+
+    ;; If not found in child scopes, check current scope
+    (let ((variables (plist-get scope :variables)))
+      (gethash identifier variables))))
+
+;;;###autoload
+(defun js-ts-defs-jump-to-definition ()
+  "Jump to the definition of the identifier at point."
+  (interactive)
+  (unless (treesit-parser-list)
+    (user-error "No tree-sitter parser available"))
+
+  (let* ((node (treesit-node-at (point)))
+         (identifier-node nil)
+         (identifier nil))
+
+    ;; Find the identifier node at point
+    (while (and node (not identifier-node))
+      (when (string= (treesit-node-type node) "identifier")
+        (setq identifier-node node))
+      (setq node (treesit-node-parent node)))
+
+    (unless identifier-node
+      (user-error "No identifier at point"))
+
+    (setq identifier (substring-no-properties (treesit-node-text identifier-node)))
+
+    ;; Get the root node and build scope structure
+    (let* ((parser (car (treesit-parser-list)))
+           (root-node (treesit-parser-root-node parser))
+           (scope (js-ts-defs root-node))
+           (definition-pos (js-ts-defs-find-definition scope identifier (point))))
+
+      (if definition-pos
+          (goto-char definition-pos)
+        (user-error "Definition not found for `%s'" identifier)))))
+
 (provide 'js-ts-defs)
 
 ;;; js-ts-defs.el ends here
