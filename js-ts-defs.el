@@ -39,7 +39,7 @@ Returns a nested scope structure with variable definitions."
   (let ((scope (js-ts-defs--build-scope "program"
                                         (treesit-node-start root-node)
                                         (treesit-node-end root-node))))
-    (js-ts-defs--process-node root-node scope)
+    (js-ts-defs--process-node root-node scope scope)
     scope))
 
 (defun js-ts-defs--build-scope (scope-type start-pos end-pos)
@@ -51,28 +51,38 @@ SCOPE-TYPE can be `program', `function', etc."
         :variables (make-hash-table :test 'equal)
         :children '()))
 
-(defun js-ts-defs--process-node (node scope)
-  "Process NODE and add definitions to SCOPE, recursively processing children."
+(defun js-ts-defs--process-node (node function-scope block-scope)
+  "Process NODE and add definitions to appropriate scopes.
+FUNCTION-SCOPE is the enclosing function/program scope for variable declarations.
+BLOCK-SCOPE is the current block scope for lexical declarations."
   (let ((node-type (treesit-node-type node)))
     (cond
      ;; Function declarations create new scopes
      ((or (string= node-type "function_declaration")
           (string= node-type "function_expression"))
-      (js-ts-defs--process-function node scope))
+      (js-ts-defs--process-function node function-scope block-scope))
 
-     ;; Variable declarations
+     ;; Variable declarations go to function scope
      ((string= node-type "variable_declaration")
-      (js-ts-defs--process-variable-declaration node scope))
+      (js-ts-defs--process-variable-declaration node function-scope block-scope))
 
-     ;; Lexical declarations (let, const)
+     ;; Lexical declarations go to block scope
      ((string= node-type "lexical_declaration")
-      (js-ts-defs--process-lexical-declaration node scope))
+      (js-ts-defs--process-lexical-declaration node function-scope block-scope))
+
+     ;; Statement blocks that may need block scopes
+     ((string= node-type "statement_block")
+      (js-ts-defs--process-statement-block node function-scope block-scope))
+
+     ;; Catch clauses that define error variables
+     ((string= node-type "catch_clause")
+      (js-ts-defs--process-catch-clause node function-scope block-scope))
 
      ;; For other nodes, just process children
      (t
-      (js-ts-defs--process-children node scope)))))
+      (js-ts-defs--process-children node function-scope block-scope)))))
 
-(defun js-ts-defs--process-function (node scope)
+(defun js-ts-defs--process-function (node _parent-function-scope parent-block-scope)
   "Process a function NODE, creating a new child scope."
   (let* ((node-type (treesit-node-type node))
          (function-scope (js-ts-defs--build-scope "function"
@@ -86,9 +96,9 @@ SCOPE-TYPE can be `program', `function', etc."
         (let ((name (substring-no-properties (treesit-node-text name-node)))
               (pos (treesit-node-start name-node)))
           (cond
-           ;; For function_declaration, add name to current scope
+           ;; For function_declaration, add name to parent block scope
            ((string= node-type "function_declaration")
-            (js-ts-defs--add-variable scope name pos))
+            (js-ts-defs--add-variable parent-block-scope name pos))
            ;; For function_expression, add name to function's own scope
            ((string= node-type "function_expression")
             (js-ts-defs--add-variable function-scope name pos))))))
@@ -97,17 +107,23 @@ SCOPE-TYPE can be `program', `function', etc."
     (dolist (param parameters)
       (js-ts-defs--add-variable function-scope (car param) (cdr param)))
 
-    ;; Process the function body in the new scope
+    ;; Process the function body in the new scope (function scope serves as both function and block scope)
     (let ((body (js-ts-defs--get-function-body node)))
       (when body
-        (js-ts-defs--process-node body function-scope)))
+        (if (string= (treesit-node-type body) "statement_block")
+            ;; If body is a statement block, process its children directly
+            (let ((children (treesit-node-children body)))
+              (dolist (child children)
+                (js-ts-defs--process-node child function-scope function-scope)))
+          ;; Otherwise process the body node normally
+          (js-ts-defs--process-node body function-scope function-scope))))
 
-    ;; Add the function scope as a child of the current scope
-    (setf (plist-get scope :children)
-          (append (plist-get scope :children) (list function-scope)))))
+    ;; Add the function scope as a child of the parent block scope
+    (setf (plist-get parent-block-scope :children)
+          (append (plist-get parent-block-scope :children) (list function-scope)))))
 
-(defun js-ts-defs--process-variable-declaration (node scope)
-  "Process a variable declaration NODE and add variables to SCOPE."
+(defun js-ts-defs--process-variable-declaration (node function-scope block-scope)
+  "Process a variable declaration NODE and add variables to FUNCTION-SCOPE."
   (let ((declarators (treesit-node-children node)))
     (dolist (child declarators)
       (when (string= (treesit-node-type child) "variable_declarator")
@@ -115,14 +131,14 @@ SCOPE-TYPE can be `program', `function', etc."
           (when (and identifier (string= (treesit-node-type identifier) "identifier"))
             (let ((name (substring-no-properties (treesit-node-text identifier)))
                   (pos (treesit-node-start identifier)))
-              (js-ts-defs--add-variable scope name pos))))
+              (js-ts-defs--add-variable function-scope name pos))))
         ;; Process the value part of the declaration if it exists
         (let ((value (treesit-node-child-by-field-name child "value")))
           (when value
-            (js-ts-defs--process-node value scope)))))))
+            (js-ts-defs--process-node value function-scope block-scope)))))))
 
-(defun js-ts-defs--process-lexical-declaration (node scope)
-  "Process a lexical declaration NODE (let/const) and add variables to SCOPE."
+(defun js-ts-defs--process-lexical-declaration (node function-scope block-scope)
+  "Process a lexical declaration NODE (let/const) and add variables to BLOCK-SCOPE."
   (let ((declarators (treesit-node-children node)))
     (dolist (child declarators)
       (when (string= (treesit-node-type child) "variable_declarator")
@@ -130,11 +146,11 @@ SCOPE-TYPE can be `program', `function', etc."
           (when (and identifier (string= (treesit-node-type identifier) "identifier"))
             (let ((name (substring-no-properties (treesit-node-text identifier)))
                   (pos (treesit-node-start identifier)))
-              (js-ts-defs--add-variable scope name pos))))
+              (js-ts-defs--add-variable block-scope name pos))))
         ;; Process the value part of the declaration if it exists
         (let ((value (treesit-node-child-by-field-name child "value")))
           (when value
-            (js-ts-defs--process-node value scope)))))))
+            (js-ts-defs--process-node value function-scope block-scope)))))))
 
 (defun js-ts-defs--get-function-parameters (node)
   "Extract parameter names and positions from function NODE."
@@ -159,11 +175,62 @@ SCOPE-TYPE can be `program', `function', etc."
     (unless (gethash name variables)
       (puthash name position variables))))
 
-(defun js-ts-defs--process-children (node scope)
-  "Process all children of NODE in the current SCOPE."
+(defun js-ts-defs--process-statement-block (node function-scope block-scope)
+  "Process a statement block NODE, creating a block scope if it contains lexical declarations."
+  (let ((children (treesit-node-children node))
+        (has-lexical-declaration nil))
+
+    ;; Check if this block contains any lexical declarations
+    (dolist (child children)
+      (when (or (string= (treesit-node-type child) "lexical_declaration")
+                (string= (treesit-node-type child) "function_declaration"))
+        (setq has-lexical-declaration t)))
+
+    (if has-lexical-declaration
+        ;; Create a block scope and process children in it
+        (let ((new-block-scope (js-ts-defs--build-scope "block"
+                                                        (treesit-node-start node)
+                                                        (treesit-node-end node))))
+          (dolist (child children)
+            (js-ts-defs--process-node child function-scope new-block-scope))
+          (setf (plist-get block-scope :children)
+                (append (plist-get block-scope :children) (list new-block-scope))))
+      ;; No lexical declarations, just process children in current scopes
+      (dolist (child children)
+        (js-ts-defs--process-node child function-scope block-scope)))))
+
+(defun js-ts-defs--process-catch-clause (node _function-scope block-scope)
+  "Process a catch clause NODE, unconditionally creating a new block scope."
+  (let ((parameter (treesit-node-child-by-field-name node "parameter"))
+        (body (treesit-node-child-by-field-name node "body"))
+        (catch-scope (js-ts-defs--build-scope "block"
+                                              (treesit-node-start node)
+                                              (treesit-node-end node))))
+
+    ;; Add the error parameter to the catch scope if it exists
+    (when (and parameter (string= (treesit-node-type parameter) "identifier"))
+      (let ((name (substring-no-properties (treesit-node-text parameter)))
+            (pos (treesit-node-start parameter)))
+        (js-ts-defs--add-variable catch-scope name pos)))
+
+    ;; Process the catch body in the catch scope
+    (when body
+      (if (string= (treesit-node-type body) "statement_block")
+          ;; If body is a statement block, process its children directly
+          (let ((children (treesit-node-children body)))
+            (dolist (child children)
+              (js-ts-defs--process-node child catch-scope catch-scope)))
+        ;; Otherwise process the body node normally
+        (js-ts-defs--process-node body catch-scope catch-scope)))
+
+    (setf (plist-get block-scope :children)
+          (append (plist-get block-scope :children) (list catch-scope)))))
+
+(defun js-ts-defs--process-children (node function-scope block-scope)
+  "Process all children of NODE in the current scopes."
   (let ((children (treesit-node-children node)))
     (dolist (child children)
-      (js-ts-defs--process-node child scope))))
+      (js-ts-defs--process-node child function-scope block-scope))))
 
 (provide 'js-ts-defs)
 
