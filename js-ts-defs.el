@@ -42,14 +42,17 @@ Returns a nested scope structure with variable definitions."
     (js-ts-defs--process-node root-node scope scope)
     scope))
 
-(defun js-ts-defs--build-scope (scope-type start-pos end-pos)
+(defun js-ts-defs--build-scope (scope-type start-pos end-pos &optional is-arrow)
   "Build a scope structure of SCOPE-TYPE with START-POS and END-POS.
-SCOPE-TYPE can be `program', `function', etc."
-  (list :type scope-type
-        :start start-pos
-        :end end-pos
-        :variables (make-hash-table :test 'equal)
-        :children '()))
+If IS-ARROW is non-nil, marks this function scope as an arrow function."
+  (let ((scope (list :type scope-type
+                     :start start-pos
+                     :end end-pos
+                     :variables (make-hash-table :test 'equal)
+                     :children '())))
+    (when is-arrow
+      (setf (plist-get scope :is-arrow) t))
+    scope))
 
 (defun js-ts-defs--process-node (node function-scope block-scope)
   "Process NODE and add definitions to appropriate scopes.
@@ -103,9 +106,11 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
 (defun js-ts-defs--process-function (node _parent-function-scope parent-block-scope)
   "Process a function NODE, creating a new child scope."
   (let* ((node-type (treesit-node-type node))
+         (is-arrow (string= node-type "arrow_function"))
          (function-scope (js-ts-defs--build-scope "function"
                                                   (treesit-node-start node)
-                                                  (treesit-node-end node)))
+                                                  (treesit-node-end node)
+                                                  is-arrow))
          (parameters (js-ts-defs--get-function-parameters node)))
 
     ;; Handle function names based on node type
@@ -470,6 +475,28 @@ Searches from innermost to outermost scope."
     (let ((variables (plist-get scope :variables)))
       (gethash identifier variables))))
 
+(defun js-ts-defs--find-dynamic-function-scope (scope position)
+  "Find if POSITION is within a non-arrow function scope in SCOPE.
+Returns t if inside a non-arrow function scope, nil otherwise."
+  (catch 'found
+    ;; Check if we're inside any child scopes
+    (dolist (child-scope (plist-get scope :children))
+      (when (and (>= position (plist-get child-scope :start))
+                 (<= position (plist-get child-scope :end)))
+        ;; If this child scope is a non-arrow function, we found one
+        (when (and (string= (plist-get child-scope :type) "function")
+                   (not (plist-get child-scope :is-arrow)))
+          (throw 'found t))
+        ;; Otherwise recurse into the child scope
+        (let ((result (js-ts-defs--find-dynamic-function-scope child-scope position)))
+          (when result
+            (throw 'found result)))))
+
+    ;; Check if current scope is a non-arrow function
+    (when (and (string= (plist-get scope :type) "function")
+               (not (plist-get scope :is-arrow)))
+      t)))
+
 ;;;###autoload
 (defun js-ts-defs-jump-to-definition ()
   "Jump to the definition of the identifier at point."
@@ -500,7 +527,12 @@ Searches from innermost to outermost scope."
 
       (if definition-pos
           (goto-char definition-pos)
-        (user-error "Definition not found for `%s'" identifier)))))
+        ;; Special case for "arguments" - check if we're ultimately in a
+        ;; non-arrow function scope
+        (if (and (string= identifier "arguments")
+                 (js-ts-defs--find-dynamic-function-scope scope (point)))
+            (user-error "`arguments' has dynamic scope")
+          (user-error "Definition not found for `%s'" identifier))))))
 
 (provide 'js-ts-defs)
 
