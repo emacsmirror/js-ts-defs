@@ -84,6 +84,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
      ((string= node-type "for_statement")
       (js-ts-defs--process-for-statement node function-scope block-scope))
 
+     ;; For in statements that may need block scopes for lexical declarations
+     ((string= node-type "for_in_statement")
+      (js-ts-defs--process-for-in-statement node function-scope block-scope))
+
      ;; For other nodes, just process children
      (t
       (js-ts-defs--process-children node function-scope block-scope)))))
@@ -273,6 +277,58 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
           (js-ts-defs--process-node condition function-scope block-scope))
         (when update
           (js-ts-defs--process-node update function-scope block-scope))
+        (when body
+          (js-ts-defs--process-node body function-scope block-scope))))))
+
+(defun js-ts-defs--process-for-in-statement (node function-scope block-scope)
+  "Process a for in statement NODE, creating a block scope if it contains lexical declarations."
+  (let ((kind (treesit-node-child-by-field-name node "kind"))
+        (left (treesit-node-child-by-field-name node "left"))
+        (right (treesit-node-child-by-field-name node "right"))
+        (body (treesit-node-child-by-field-name node "body"))
+        (has-lexical-declaration nil))
+
+    ;; Check if kind is const/let and left is an identifier
+    (when (and kind left
+               (string= (treesit-node-type left) "identifier")
+               (let ((kind-text (substring-no-properties (treesit-node-text kind))))
+                 (or (string= kind-text "const") (string= kind-text "let"))))
+      (setq has-lexical-declaration t))
+
+    (if has-lexical-declaration
+        ;; Create a scope for the parenthesized part of the for in loop with a
+        ;; lexical declaration
+        (let ((for-scope (js-ts-defs--build-scope "for"
+                                                  (treesit-node-start node)
+                                                  (treesit-node-end node))))
+          ;; Add the lexical variable to the for scope
+          (let ((name (substring-no-properties (treesit-node-text left)))
+                (pos (treesit-node-start left)))
+            (js-ts-defs--add-variable for-scope name pos))
+
+          ;; Process right side in the for scope
+          (when right
+            (js-ts-defs--process-node right function-scope for-scope))
+
+          ;; Process body in the for scope
+          (when body
+            (js-ts-defs--process-node body function-scope for-scope))
+
+          (setf (plist-get block-scope :children)
+                (append (plist-get block-scope :children) (list for-scope))))
+      ;; Handle var declaration or process children in current scopes
+      (progn
+        ;; If kind is var and left is identifier, add to function scope
+        (when (and kind left
+                   (string= (treesit-node-type left) "identifier")
+                   (string= (substring-no-properties (treesit-node-text kind)) "var"))
+          (let ((name (substring-no-properties (treesit-node-text left)))
+                (pos (treesit-node-start left)))
+            (js-ts-defs--add-variable function-scope name pos)))
+
+        ;; Process other parts
+        (when right
+          (js-ts-defs--process-node right function-scope block-scope))
         (when body
           (js-ts-defs--process-node body function-scope block-scope))))))
 
