@@ -141,11 +141,11 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
   (let ((declarators (treesit-node-children node)))
     (dolist (child declarators)
       (when (string= (treesit-node-type child) "variable_declarator")
-        (let ((identifier (treesit-node-child child 0)))
-          (when (and identifier (string= (treesit-node-type identifier) "identifier"))
-            (let ((name (substring-no-properties (treesit-node-text identifier)))
-                  (pos (treesit-node-start identifier)))
-              (js-ts-defs--add-variable function-scope name pos))))
+        (let ((pattern (treesit-node-child-by-field-name child "name")))
+          (when pattern
+            (let ((identifiers (js-ts-defs--extract-identifiers-from-pattern pattern)))
+              (dolist (identifier identifiers)
+                (js-ts-defs--add-variable function-scope (car identifier) (cdr identifier))))))
         ;; Process the value part of the declaration if it exists
         (let ((value (treesit-node-child-by-field-name child "value")))
           (when value
@@ -156,11 +156,11 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
   (let ((declarators (treesit-node-children node)))
     (dolist (child declarators)
       (when (string= (treesit-node-type child) "variable_declarator")
-        (let ((identifier (treesit-node-child child 0)))
-          (when (and identifier (string= (treesit-node-type identifier) "identifier"))
-            (let ((name (substring-no-properties (treesit-node-text identifier)))
-                  (pos (treesit-node-start identifier)))
-              (js-ts-defs--add-variable block-scope name pos))))
+        (let ((pattern (treesit-node-child-by-field-name child "name")))
+          (when pattern
+            (let ((identifiers (js-ts-defs--extract-identifiers-from-pattern pattern)))
+              (dolist (identifier identifiers)
+                (js-ts-defs--add-variable block-scope (car identifier) (cdr identifier))))))
         ;; Process the value part of the declaration if it exists
         (let ((value (treesit-node-child-by-field-name child "value")))
           (when value
@@ -173,11 +173,8 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
     (when formal-params
       (let ((param-nodes (treesit-node-children formal-params)))
         (dolist (param-node param-nodes)
-          (when (string= (treesit-node-type param-node) "identifier")
-            (let ((name (substring-no-properties (treesit-node-text param-node)))
-                  (pos (treesit-node-start param-node)))
-              (push (cons name pos) params))))))
-    (nreverse params)))
+          (setq params (append params (js-ts-defs--extract-identifiers-from-pattern param-node))))))
+    params))
 
 (defun js-ts-defs--get-function-body (node)
   "Get the body node of a function NODE."
@@ -222,10 +219,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
                                               (treesit-node-end node))))
 
     ;; Add the error parameter to the catch scope if it exists
-    (when (and parameter (string= (treesit-node-type parameter) "identifier"))
-      (let ((name (substring-no-properties (treesit-node-text parameter)))
-            (pos (treesit-node-start parameter)))
-        (js-ts-defs--add-variable catch-scope name pos)))
+    (when parameter
+      (let ((identifiers (js-ts-defs--extract-identifiers-from-pattern parameter)))
+        (dolist (identifier identifiers)
+          (js-ts-defs--add-variable catch-scope (car identifier) (cdr identifier)))))
 
     ;; Process the catch body in the catch scope
     (when body
@@ -346,6 +343,64 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
 
   ;; Process class body without creating a function scope
   (js-ts-defs--process-children node function-scope block-scope))
+
+(defun js-ts-defs--extract-identifiers-from-pattern (node)
+  "Extract all identifier names and positions from a parameter pattern NODE.
+Handles identifier, rest_pattern, object_pattern, and array_pattern recursively."
+  (let ((node-type (treesit-node-type node))
+        (identifiers '()))
+    (cond
+     ;; Simple identifier
+     ((string= node-type "identifier")
+      (let ((name (substring-no-properties (treesit-node-text node)))
+            (pos (treesit-node-start node)))
+        (list (cons name pos))))
+
+     ;; Rest pattern (...param)
+     ((string= node-type "rest_pattern")
+      (let ((pattern (treesit-node-child node 1)))
+        (when pattern
+          (js-ts-defs--extract-identifiers-from-pattern pattern))))
+
+     ;; Object pattern ({a, b: c})
+     ((string= node-type "object_pattern")
+      (let ((children (treesit-node-children node)))
+        (dolist (child children)
+          (when (or (string= (treesit-node-type child) "pair_pattern")
+                    (string= (treesit-node-type child) "shorthand_property_identifier_pattern")
+                    (string= (treesit-node-type child) "rest_pattern"))
+            (cond
+             ;; Shorthand property pattern {a}
+             ((string= (treesit-node-type child) "shorthand_property_identifier_pattern")
+              (let ((name (substring-no-properties (treesit-node-text child)))
+                    (pos (treesit-node-start child)))
+                (setq identifiers (append identifiers (list (cons name pos))))))
+             ;; Property pair {a: b}
+             ((string= (treesit-node-type child) "pair_pattern")
+              (let ((value (treesit-node-child-by-field-name child "value")))
+                (when value
+                  (setq identifiers (append identifiers (js-ts-defs--extract-identifiers-from-pattern value))))))
+             ;; Rest pattern in object {...rest}
+             ((string= (treesit-node-type child) "rest_pattern")
+              (setq identifiers (append identifiers (js-ts-defs--extract-identifiers-from-pattern child)))))))
+        identifiers))
+
+     ;; Array pattern ([a, b])
+     ((string= node-type "array_pattern")
+      (let ((children (treesit-node-children node)))
+        (dolist (child children)
+          (when (not (string= (treesit-node-type child) ","))
+            (setq identifiers (append identifiers (js-ts-defs--extract-identifiers-from-pattern child)))))
+        identifiers))
+
+     ;; Default parameter (param = value)
+     ((string= node-type "assignment_pattern")
+      (let ((left (treesit-node-child-by-field-name node "left")))
+        (when left
+          (js-ts-defs--extract-identifiers-from-pattern left))))
+
+     ;; Unknown pattern type, return empty list
+     (t '()))))
 
 (defun js-ts-defs--process-children (node function-scope block-scope)
   "Process all children of NODE in the current scopes."
