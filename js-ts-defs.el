@@ -76,6 +76,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
      ((string= node-type "lexical_declaration")
       (js-ts-defs--process-lexical-declaration node function-scope block-scope))
 
+     ;; Import statements add variables to block scope
+     ((string= node-type "import_statement")
+      (js-ts-defs--process-import-statement node function-scope block-scope))
+
      ;; Statement blocks that may need block scopes
      ((string= node-type "statement_block")
       (js-ts-defs--process-statement-block node function-scope block-scope))
@@ -343,6 +347,48 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
 
   ;; Process class body without creating a function scope
   (js-ts-defs--process-children node function-scope block-scope))
+
+(defun js-ts-defs--process-import-statement (node function-scope block-scope)
+  "Process an import statement NODE, adding imported variables to block scope."
+  (let ((import-clause (treesit-node-child node 1)))
+    (when import-clause
+      (js-ts-defs--process-import-clause import-clause block-scope)))
+
+  ;; Process other parts of the import statement
+  (js-ts-defs--process-children node function-scope block-scope))
+
+(defun js-ts-defs--process-import-clause (node block-scope)
+  "Process an import clause NODE, adding imported variables to block scope."
+  (let ((children (treesit-node-children node)))
+    (dolist (child children)
+      (let ((node-type (treesit-node-type child)))
+        (cond
+         ;; Default import: import foo from 'module'
+         ((string= node-type "identifier")
+          (let ((name (substring-no-properties (treesit-node-text child)))
+                (pos (treesit-node-start child)))
+            (js-ts-defs--add-variable block-scope name pos)))
+
+         ;; Namespace import: import * as foo from 'module'
+         ((string= node-type "namespace_import")
+          (let* ((children (treesit-node-children child))
+                 (identifier (car (last children))))
+            (when (and identifier (string= (treesit-node-type identifier) "identifier"))
+              (let ((name (substring-no-properties (treesit-node-text identifier)))
+                    (pos (treesit-node-start identifier)))
+                (js-ts-defs--add-variable block-scope name pos)))))
+
+         ;; Named imports: import { foo, bar, baz as qux } from 'module'
+         ((string= node-type "named_imports")
+          (let ((grandchildren (treesit-node-children child)))
+            (dolist (grandchild grandchildren)
+              (when (string= (treesit-node-type grandchild) "import_specifier")
+                (let* ((spec-children (treesit-node-children grandchild))
+                       (name-node (car (last spec-children))))
+                  (when (and name-node (string= (treesit-node-type name-node) "identifier"))
+                    (let ((name (substring-no-properties (treesit-node-text name-node)))
+                          (pos (treesit-node-start name-node)))
+                      (js-ts-defs--add-variable block-scope name pos)))))))))))))
 
 (defun js-ts-defs--extract-identifiers-from-pattern (node)
   "Extract all identifier names and positions from a parameter pattern NODE.
