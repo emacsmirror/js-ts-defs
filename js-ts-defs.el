@@ -32,6 +32,13 @@
 
 (require 'treesit)
 
+;; Buffer-local variables for caching
+(defvar-local js-ts-defs--cached-scope nil
+  "Buffer-local cache for the scope structure.")
+
+(defvar-local js-ts-defs--change-hook-setup nil
+  "Buffer-local flag indicating if tree-sitter change hook is setup.")
+
 (defun js-ts-defs (root-node)
   "Extract JavaScript definitions from ROOT-NODE using tree-sitter.
 ROOT-NODE should be a tree-sitter root node.
@@ -497,12 +504,34 @@ Returns t if inside a non-arrow function scope, nil otherwise."
                (not (plist-get scope :is-arrow)))
       t)))
 
+(defun js-ts-defs--invalidate-cache (&rest _)
+  "Invalidate the cached scope structure."
+  (setq js-ts-defs--cached-scope nil))
+
+(defun js-ts-defs--setup-change-hook ()
+  "Setup tree-sitter change hook to invalidate cache when syntax tree changes."
+  (unless js-ts-defs--change-hook-setup
+    (when-let ((parser (car (treesit-parser-list))))
+      (treesit-parser-add-notifier parser #'js-ts-defs--invalidate-cache)
+      (setq js-ts-defs--change-hook-setup t))))
+
+(defun js-ts-defs--get-cached-scope ()
+  "Get the cached scope structure, computing it if necessary."
+  (unless js-ts-defs--cached-scope
+    (when-let ((parser (car (treesit-parser-list))))
+      (let ((root-node (treesit-parser-root-node parser)))
+        (setq js-ts-defs--cached-scope (js-ts-defs root-node)))))
+  js-ts-defs--cached-scope)
+
 ;;;###autoload
 (defun js-ts-defs-jump-to-definition ()
   "Jump to the definition of the identifier at point."
   (interactive)
   (unless (treesit-parser-list)
     (user-error "No tree-sitter parser available"))
+
+  ;; Setup change hook if not already done
+  (js-ts-defs--setup-change-hook)
 
   (let* ((node (treesit-node-at (point)))
          (identifier-node nil)
@@ -519,10 +548,8 @@ Returns t if inside a non-arrow function scope, nil otherwise."
 
     (setq identifier (substring-no-properties (treesit-node-text identifier-node)))
 
-    ;; Get the root node and build scope structure
-    (let* ((parser (car (treesit-parser-list)))
-           (root-node (treesit-parser-root-node parser))
-           (scope (js-ts-defs root-node))
+    ;; Get the cached scope structure
+    (let* ((scope (js-ts-defs--get-cached-scope))
            (definition-pos (js-ts-defs-find-definition scope identifier (point))))
 
       (if definition-pos
