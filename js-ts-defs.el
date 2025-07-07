@@ -61,9 +61,12 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
      ((or (string= node-type "function_declaration")
           (string= node-type "function_expression")
           (string= node-type "arrow_function")
-          (string= node-type "class_declaration")
           (string= node-type "method_definition"))
       (js-ts-defs--process-function node function-scope block-scope))
+
+     ;; Class declarations add name to block scope but don't create function scope
+     ((string= node-type "class_declaration")
+      (js-ts-defs--process-class-declaration node function-scope block-scope))
 
      ;; Variable declarations go to function scope
      ((string= node-type "variable_declaration")
@@ -107,9 +110,8 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
         (let ((name (substring-no-properties (treesit-node-text name-node)))
               (pos (treesit-node-start name-node)))
           (cond
-           ;; For function_declaration and class_declaration, add name to parent block scope
-           ((or (string= node-type "function_declaration")
-                (string= node-type "class_declaration"))
+           ;; For function_declaration, add name to parent block scope
+           ((string= node-type "function_declaration")
             (js-ts-defs--add-variable parent-block-scope name pos))
            ;; For function_expression, add name to function's own scope
            ((string= node-type "function_expression")
@@ -332,6 +334,18 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
           (js-ts-defs--process-node right function-scope block-scope))
         (when body
           (js-ts-defs--process-node body function-scope block-scope))))))
+
+(defun js-ts-defs--process-class-declaration (node function-scope block-scope)
+  "Process a class declaration NODE, adding the class name to block scope."
+  (let ((name-node (treesit-node-child-by-field-name node "name")))
+    ;; Add class name to block scope
+    (when (and name-node (string= (treesit-node-type name-node) "identifier"))
+      (let ((name (substring-no-properties (treesit-node-text name-node)))
+            (pos (treesit-node-start name-node)))
+        (js-ts-defs--add-variable block-scope name pos))))
+
+  ;; Process class body without creating a function scope
+  (js-ts-defs--process-children node function-scope block-scope))
 
 (defun js-ts-defs--process-children (node function-scope block-scope)
   "Process all children of NODE in the current scopes."
