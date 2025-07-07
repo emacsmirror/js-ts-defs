@@ -80,6 +80,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
      ((string= node-type "catch_clause")
       (js-ts-defs--process-catch-clause node function-scope block-scope))
 
+     ;; For statements that may need block scopes for lexical declarations
+     ((string= node-type "for_statement")
+      (js-ts-defs--process-for-statement node function-scope block-scope))
+
      ;; For other nodes, just process children
      (t
       (js-ts-defs--process-children node function-scope block-scope)))))
@@ -228,6 +232,49 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
 
     (setf (plist-get block-scope :children)
           (append (plist-get block-scope :children) (list catch-scope)))))
+
+(defun js-ts-defs--process-for-statement (node function-scope block-scope)
+  "Process a for statement NODE, creating a block scope if it contains lexical declarations."
+  (let ((initializer (treesit-node-child-by-field-name node "initializer"))
+        (condition (treesit-node-child-by-field-name node "condition"))
+        (update (treesit-node-child-by-field-name node "update"))
+        (body (treesit-node-child-by-field-name node "body"))
+        (has-lexical-declaration nil))
+
+    ;; Check if the initializer contains a lexical declaration
+    (when (and initializer (string= (treesit-node-type initializer) "lexical_declaration"))
+      (setq has-lexical-declaration t))
+
+    (if has-lexical-declaration
+        ;; Create a scope for the parenthesized part of the for loop
+        (let ((for-scope (js-ts-defs--build-scope "for"
+                                                  (treesit-node-start node)
+                                                  (treesit-node-end node))))
+          ;; Process the lexical declaration in the for scope
+          (js-ts-defs--process-node initializer function-scope for-scope)
+
+          ;; Process condition and update in the for scope
+          (when condition
+            (js-ts-defs--process-node condition function-scope for-scope))
+          (when update
+            (js-ts-defs--process-node update function-scope for-scope))
+
+          ;; Process body in the for scope
+          (when body
+            (js-ts-defs--process-node body function-scope for-scope))
+
+          (setf (plist-get block-scope :children)
+                (append (plist-get block-scope :children) (list for-scope))))
+      ;; No lexical declarations, just process children in current scopes
+      (progn
+        (when initializer
+          (js-ts-defs--process-node initializer function-scope block-scope))
+        (when condition
+          (js-ts-defs--process-node condition function-scope block-scope))
+        (when update
+          (js-ts-defs--process-node update function-scope block-scope))
+        (when body
+          (js-ts-defs--process-node body function-scope block-scope))))))
 
 (defun js-ts-defs--process-children (node function-scope block-scope)
   "Process all children of NODE in the current scopes."
