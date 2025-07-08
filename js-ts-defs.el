@@ -49,7 +49,7 @@
 (defvar-local js-ts-defs--change-hook-setup nil
   "Buffer-local flag indicating if tree-sitter change hook is setup.")
 
-(defun js-ts-defs (root-node)
+(defun js-ts-defs-build-scope (root-node)
   "Extract JavaScript definitions from ROOT-NODE using tree-sitter.
 ROOT-NODE should be a tree-sitter root node.
 Returns a nested scope structure with variable definitions."
@@ -568,7 +568,7 @@ Argument _ is ignored (used for tree-sitter callback compatibility)."
   (unless js-ts-defs--cached-scope
     (when-let ((parser (car (treesit-parser-list))))
       (let ((root-node (treesit-parser-root-node parser)))
-        (setq js-ts-defs--cached-scope (js-ts-defs root-node)))))
+        (setq js-ts-defs--cached-scope (js-ts-defs-build-scope root-node)))))
   js-ts-defs--cached-scope)
 
 ;;;###autoload
