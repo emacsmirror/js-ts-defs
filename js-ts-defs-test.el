@@ -112,6 +112,44 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-named-function-expression-scope ()
+  "Test that named functions are available in function expression scope."
+  (with-temp-buffer
+    (insert "var fn = function namedFunc(param1, param2) {\n")
+    (insert "  return param1 + param2;\n")
+    (insert "};\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 76      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "fn" 5 variables)  ; position of "fn"
+                               variables)
+                  :children (list
+                             ;; Build expected function expression scope
+                             (list :type "function"
+                                   :start 10 ; start of function expression
+                                   :end 74   ; end of function expression
+                                   ;; Build expected function variables hash table
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "namedFunc" 19 variables) ; position of "namedFunc"
+                                                (puthash "param1" 29 variables)    ; position of "param1"
+                                                (puthash "param2" 37 variables)    ; position of "param2"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
