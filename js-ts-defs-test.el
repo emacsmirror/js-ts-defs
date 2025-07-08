@@ -26,12 +26,47 @@
 ;;; Code:
 
 (require 'ert)
+(require 'js-ts-defs)
 
-(ert-deftest js-ts-defs-test-dummy ()
-  "A dummy test to verify ERT is working."
-  (should (= 2 (+ 1 1)))
-  (should (string= "hello" "hello"))
-  (should-not (string= "hello" "world")))
+(ert-deftest js-ts-defs-test-jump-to-definition ()
+  "Test jumping to variable and function definitions."
+  (with-temp-buffer
+    (insert "function greet(name) {\n")
+    (insert "  let message = 'Hello, ' + name;\n")
+    (insert "  return message;\n")
+    (insert "}\n")
+    (insert "\n")
+    (insert "let result = greet('World');\n")
+
+    ;; Enable js-ts-mode
+    (js-ts-mode)
+
+    ;; Test 1: Jump from 'message' usage to its definition
+    (goto-char (point-min))
+    (search-forward "return message")
+    (backward-word)  ; Move to start of 'message'
+    (let ((usage-pos (point)))
+      (js-ts-defs-jump-to-definition)
+      (should (< (point) usage-pos))  ; Should jump backward to definition
+      (should (looking-at "message")))
+
+    ;; Test 2: Jump from function call to function definition
+    (goto-char (point-min))
+    (search-forward "greet('World')")
+    (backward-word 2)  ; Move to start of 'greet'
+    (let ((call-pos (point)))
+      (js-ts-defs-jump-to-definition)
+      (should (< (point) call-pos))  ; Should jump backward to definition
+      (should (looking-at "greet")))
+
+    ;; Test 3: Jump from parameter usage to parameter definition
+    (goto-char (point-min))
+    (search-forward "'Hello, ' + name")
+    (backward-word)  ; Move to start of 'name'
+    (let ((usage-pos (point)))
+      (js-ts-defs-jump-to-definition)
+      (should (< (point) usage-pos))  ; Should jump backward to parameter
+      (should (looking-at "name")))))
 
 (provide 'js-ts-defs-test)
 
