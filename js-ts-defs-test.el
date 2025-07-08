@@ -85,37 +85,29 @@ Like `equal' but also compares hash table contents."
     ;; Build the scope
     (let* ((root-node (treesit-buffer-root-node))
            (scope (js-ts-defs-build-scope root-node))
-           ;; Create expected scope structure manually
-           (expected-variables (make-hash-table :test 'equal))
-           (expected-func-variables (make-hash-table :test 'equal))
-           (expected-func-scope nil)
-           (expected-scope nil))
-
-      ;; Build expected global variables hash table
-      (puthash "globalVar" 5 expected-variables)  ; position of "globalVar"
-      (puthash "globalLet" 24 expected-variables) ; position of "globalLet"
-      (puthash "myFunc" 48 expected-variables)    ; position of "myFunc"
-
-      ;; Build expected function variables hash table
-      (puthash "param1" 55 expected-func-variables) ; position of "param1"
-      (puthash "localVar" 71 expected-func-variables) ; position of "localVar"
-      (puthash "localLet" 91 expected-func-variables) ; position of "localLet"
-
-      ;; Build expected function scope
-      (setq expected-func-scope
-            (list :type "function"
-                  :start 39  ; start of function
-                  :end 106   ; end of function
-                  :variables expected-func-variables
-                  :children '()))
-
-      ;; Build expected global scope
-      (setq expected-scope
+           (expected-scope
+            ;; Build expected global scope
             (list :type "program"
                   :start 1     ; start of buffer
                   :end 107     ; end of buffer
-                  :variables expected-variables
-                  :children (list expected-func-scope)))
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "globalVar" 5 variables)  ; position of "globalVar"
+                               (puthash "globalLet" 24 variables) ; position of "globalLet"
+                               (puthash "myFunc" 48 variables)    ; position of "myFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 39 ; start of function
+                                   :end 106  ; end of function
+                                   ;; Build expected function variables hash table
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "param1" 55 variables)   ; position of "param1"
+                                                (puthash "localVar" 71 variables) ; position of "localVar"
+                                                (puthash "localLet" 91 variables) ; position of "localLet"
+                                                variables)
+                                   :children '())))))
 
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
