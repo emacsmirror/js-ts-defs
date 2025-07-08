@@ -150,6 +150,108 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-var-vs-let-const-scoping ()
+  "Test that var is added to function scope while let/const is added to block scope."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  {\n")
+    (insert "    var varInBlock = 1;\n")
+    (insert "    let letInBlock = 2;\n")
+    (insert "    const constInBlock = 3;\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 109     ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 108  ; end of function
+                                   ;; var should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "varInBlock" 35 variables) ; position of "varInBlock"
+                                                variables)
+                                   :children (list
+                                              ;; Build expected block scope
+                                              (list :type "block"
+                                                    :start 25 ; start of block
+                                                    :end 106  ; end of block
+                                                    ;; let/const should be in block scope
+                                                    :variables (let ((variables (make-hash-table :test 'equal)))
+                                                                 (puthash "letInBlock" 59 variables)   ; position of "letInBlock"
+                                                                 (puthash "constInBlock" 85 variables) ; position of "constInBlock"
+                                                                 variables)
+                                                    :children '())))))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-catch-block-scope ()
+  "Test that catch variable and var declarations are scoped to catch block."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  try {\n")
+    (insert "    throw new Error('test');\n")
+    (insert "  } catch (error) {\n")
+    (insert "    var varInCatch = 1;\n")
+    (insert "    let letInCatch = 2;\n")
+    (insert "    const constInCatch = 3;\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 162     ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 161  ; end of function
+                                   ;; Function scope should be empty (var is scoped to catch block)
+                                   :variables (make-hash-table :test 'equal)
+                                   :children (list
+                                              ;; Build expected catch block scope
+                                              (list :type "block"
+                                                    :start 64 ; start of catch clause
+                                                    :end 159  ; end of catch clause
+                                                    ;; All variables should be in catch block scope
+                                                    :variables (let ((variables (make-hash-table :test 'equal)))
+                                                                 (puthash "error" 71 variables)         ; position of "error"
+                                                                 (puthash "varInCatch" 88 variables)    ; position of "varInCatch"
+                                                                 (puthash "letInCatch" 112 variables)   ; position of "letInCatch"
+                                                                 (puthash "constInCatch" 138 variables) ; position of "constInCatch"
+                                                                 variables)
+                                                    :children '())))))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
