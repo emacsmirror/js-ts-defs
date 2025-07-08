@@ -25,8 +25,18 @@
 
 ;;; Commentary:
 
-;; This package provides functionality to find JavaScript function and variable
-;; definitions using tree-sitter.
+;; Find JavaScript variable definitions using tree-sitter.
+;;
+;; This package provides `js-ts-defs-jump-to-definition' which jumps to the
+;; definition of the JavaScript identifier at point.  It uses tree-sitter to
+;; parse JavaScript code and build a scope structure to accurately resolve
+;; variable definitions.
+;;
+;; Usage:
+;;
+;;   (add-hook 'js-ts-mode-hook
+;;             (lambda ()
+;;               (local-set-key (kbd "M-.") #'js-ts-defs-jump-to-definition)))
 
 ;;; Code:
 
