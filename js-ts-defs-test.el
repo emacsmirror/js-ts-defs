@@ -491,6 +491,366 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-array-destructuring-var ()
+  "Test that array destructuring in var declarations works correctly."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  var [a, b, ...rest] = [1, 2, 3, 4, 5];\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 66      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 65   ; end of function
+                                   ;; var declarations should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "a" 30 variables)    ; position of "a"
+                                                (puthash "b" 33 variables)    ; position of "b"
+                                                (puthash "rest" 39 variables) ; position of "rest"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-object-destructuring-var ()
+  "Test that object destructuring in var declarations works correctly."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  var {x, y: z, ...spread} = obj;\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 59      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 58   ; end of function
+                                   ;; var declarations should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "x" 30 variables)      ; position of "x"
+                                                (puthash "z" 36 variables)      ; position of "z"
+                                                (puthash "spread" 42 variables) ; position of "spread"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-array-destructuring-let ()
+  "Test that array destructuring in let declarations works correctly."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  {\n")
+    (insert "    let [first, second] = arr;\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 64      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 63   ; end of function
+                                   ;; Function scope should be empty
+                                   :variables (make-hash-table :test 'equal)
+                                   :children (list
+                                              ;; Build expected block scope
+                                              (list :type "block"
+                                                    :start 25 ; start of block
+                                                    :end 61   ; end of block
+                                                    ;; let declarations should be in block scope
+                                                    :variables (let ((variables (make-hash-table :test 'equal)))
+                                                                 (puthash "first" 36 variables)  ; position of "first"
+                                                                 (puthash "second" 43 variables) ; position of "second"
+                                                                 variables)
+                                                    :children '())))))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-function-param-destructuring ()
+  "Test that destructuring in function parameters works correctly."
+  (with-temp-buffer
+    (insert "function testFunc({a, b: renamed}, [x, y]) {\n")
+    (insert "  return a + renamed + x + y;\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 78      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 77   ; end of function
+                                   ;; Function parameters should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "a" 20 variables)       ; position of "a"
+                                                (puthash "renamed" 26 variables) ; position of "renamed"
+                                                (puthash "x" 37 variables)       ; position of "x"
+                                                (puthash "y" 40 variables)       ; position of "y"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-catch-param-destructuring ()
+  "Test that destructuring in catch parameters works correctly."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  try {\n")
+    (insert "    throw {code: 500, message: 'Error'};\n")
+    (insert "  } catch ({code, message: msg}) {\n")
+    (insert "    console.log(code, msg);\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 141     ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 140  ; end of function
+                                   ;; Function scope should be empty
+                                   :variables (make-hash-table :test 'equal)
+                                   :children (list
+                                              ;; Build expected catch block scope
+                                              (list :type "block"
+                                                    :start 76 ; start of catch clause
+                                                    :end 138  ; end of catch clause
+                                                    ;; Catch parameters should be in catch scope
+                                                    :variables (let ((variables (make-hash-table :test 'equal)))
+                                                                 (puthash "code" 84 variables) ; position of "code"
+                                                                 (puthash "msg" 99 variables)  ; position of "msg"
+                                                                 variables)
+                                                    :children '())))))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-default-parameters ()
+  "Test that default parameters work correctly."
+  (with-temp-buffer
+    (insert "function testFunc(a = 1, b = 2, c) {\n")
+    (insert "  return a + b + c;\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 60      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 59   ; end of function
+                                   ;; Function parameters should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "a" 19 variables) ; position of "a"
+                                                (puthash "b" 26 variables) ; position of "b"
+                                                (puthash "c" 33 variables) ; position of "c"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-rest-parameters ()
+  "Test that rest parameters work correctly."
+  (with-temp-buffer
+    (insert "function testFunc(first, ...rest) {\n")
+    (insert "  return first + rest.length;\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 69      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 68   ; end of function
+                                   ;; Function parameters should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "first" 19 variables) ; position of "first"
+                                                (puthash "rest" 29 variables)  ; position of "rest"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-nested-destructuring ()
+  "Test that nested destructuring patterns work correctly."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  var {a: {b, c}, d: [e, f]} = obj;\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 61      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 60   ; end of function
+                                   ;; var declarations should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "b" 34 variables) ; position of "b"
+                                                (puthash "c" 37 variables) ; position of "c"
+                                                (puthash "e" 45 variables) ; position of "e"
+                                                (puthash "f" 48 variables) ; position of "f"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-destructuring-with-defaults ()
+  "Test that destructuring with default values works correctly."
+  (with-temp-buffer
+    (insert "function testFunc({a = 1, b: renamed = 2} = {}) {\n")
+    (insert "  return a + renamed;\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 75      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 74   ; end of function
+                                   ;; Function parameters should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "a" 20 variables)       ; position of "a"
+                                                (puthash "renamed" 30 variables) ; position of "renamed"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
@@ -507,28 +867,28 @@ Like `equal' but also compares hash table contents."
     ;; Test 1: Jump from 'message' usage to its definition
     (goto-char (point-min))
     (search-forward "return message")
-    (backward-word)  ; Move to start of 'message'
+    (backward-word)                     ; Move to start of 'message'
     (let ((usage-pos (point)))
       (js-ts-defs-jump-to-definition)
-      (should (< (point) usage-pos))  ; Should jump backward to definition
+      (should (< (point) usage-pos))    ; Should jump backward to definition
       (should (looking-at "message")))
 
     ;; Test 2: Jump from function call to function definition
     (goto-char (point-min))
     (search-forward "greet('World')")
-    (backward-word 2)  ; Move to start of 'greet'
+    (backward-word 2)                   ; Move to start of 'greet'
     (let ((call-pos (point)))
       (js-ts-defs-jump-to-definition)
-      (should (< (point) call-pos))  ; Should jump backward to definition
+      (should (< (point) call-pos))     ; Should jump backward to definition
       (should (looking-at "greet")))
 
     ;; Test 3: Jump from parameter usage to parameter definition
     (goto-char (point-min))
     (search-forward "'Hello, ' + name")
-    (backward-word)  ; Move to start of 'name'
+    (backward-word)                     ; Move to start of 'name'
     (let ((usage-pos (point)))
       (js-ts-defs-jump-to-definition)
-      (should (< (point) usage-pos))  ; Should jump backward to parameter
+      (should (< (point) usage-pos))    ; Should jump backward to parameter
       (should (looking-at "name")))))
 
 (ert-deftest js-ts-defs-test-no-tree-sitter-parser ()
