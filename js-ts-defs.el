@@ -462,11 +462,13 @@ BLOCK-SCOPE is the block scope to add imports to."
           (js-ts-defs--extract-identifiers-from-pattern pattern))))
 
      ;; Object pattern ({a, b: c})
-     ((string= node-type "object_pattern")
+     ((or (string= node-type "object_pattern")
+          (string= node-type "object_assignment_pattern"))
       (let ((children (treesit-node-children node)))
         (dolist (child children)
           (when (or (string= (treesit-node-type child) "pair_pattern")
                     (string= (treesit-node-type child) "shorthand_property_identifier_pattern")
+                    (string= (treesit-node-type child) "object_assignment_pattern")
                     (string= (treesit-node-type child) "rest_pattern"))
             (cond
              ;; Shorthand property pattern {a}
@@ -479,6 +481,9 @@ BLOCK-SCOPE is the block scope to add imports to."
               (let ((value (treesit-node-child-by-field-name child "value")))
                 (when value
                   (setq identifiers (append identifiers (js-ts-defs--extract-identifiers-from-pattern value))))))
+             ;; Object assignment pattern {a = defaultValue}
+             ((string= (treesit-node-type child) "object_assignment_pattern")
+              (setq identifiers (append identifiers (js-ts-defs--extract-identifiers-from-pattern child))))
              ;; Rest pattern in object {...rest}
              ((string= (treesit-node-type child) "rest_pattern")
               (setq identifiers (append identifiers (js-ts-defs--extract-identifiers-from-pattern child)))))))
