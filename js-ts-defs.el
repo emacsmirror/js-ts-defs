@@ -595,14 +595,14 @@ Argument _ is ignored (used for tree-sitter callback compatibility)."
 (defun js-ts-defs--setup-change-hook ()
   "Setup tree-sitter change hook to invalidate cache on syntax tree change."
   (unless js-ts-defs--change-hook-setup
-    (when-let ((parser (car (treesit-parser-list))))
+    (when-let* ((parser (car (treesit-parser-list))))
       (treesit-parser-add-notifier parser #'js-ts-defs--invalidate-cache)
       (setq js-ts-defs--change-hook-setup t))))
 
 (defun js-ts-defs--get-cached-scope ()
   "Get the cached scope structure, computing it if necessary."
   (unless js-ts-defs--cached-scope
-    (when-let ((parser (car (treesit-parser-list))))
+    (when-let* ((parser (car (treesit-parser-list))))
       (let ((root-node (treesit-parser-root-node parser)))
         (setq js-ts-defs--cached-scope (js-ts-defs-build-scope root-node)))))
   js-ts-defs--cached-scope)
