@@ -1199,6 +1199,56 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-variable-shadowing ()
+  "Test that the same variable name can exist in outer and inner scopes (shadowing)."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  var x = 'outer';\n")
+    (insert "  {\n")
+    (insert "    let x = 'inner';\n")
+    (insert "    console.log(x);\n")
+    (insert "  }\n")
+    (insert "  return x;\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 105     ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 104  ; end of function
+                                   ;; Outer 'x' should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "x" 29 variables) ; position of outer "x"
+                                                variables)
+                                   :children (list
+                                              ;; Build expected block scope
+                                              (list :type "block"
+                                                    :start 44 ; start of block
+                                                    :end 90   ; end of block
+                                                    ;; Inner 'x' should be in block scope
+                                                    :variables (let ((variables (make-hash-table :test 'equal)))
+                                                                 (puthash "x" 54 variables) ; position of inner "x"
+                                                                 variables)
+                                                    :children '())))))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
@@ -1368,6 +1418,38 @@ Like `equal' but also compares hash table contents."
       (let* ((outside-pos 144)
              (result (js-ts-defs-find-definition scope "blockVar" outside-pos)))
         (should (null result))))))
+
+(ert-deftest js-ts-defs-test-find-definition-with-shadowing ()
+  "Test that js-ts-defs-find-definition finds the correct variable depending on lookup context with shadowing."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  var x = 'outer';\n")
+    (insert "  {\n")
+    (insert "    let x = 'inner';\n")
+    (insert "    console.log(x); // should find inner x\n")
+    (insert "  }\n")
+    (insert "  return x; // should find outer x\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node)))
+
+      ;; Test 1: Find inner 'x' from within the block scope
+      (let* ((inner-usage-pos 83) ; Position on 'x' in console.log(x)
+             (inner-def-pos 54)   ; Position of inner 'x' declaration
+             (result (js-ts-defs-find-definition scope "x" inner-usage-pos)))
+        (should (= result inner-def-pos)))
+
+      ;; Test 2: Find outer 'x' from within the function scope (after block)
+      (goto-char (point-min))
+      (let* ((outer-usage-pos 123) ; Position on 'x' in return x
+             (outer-def-pos 29)    ; Position of outer 'x' declaration
+             (result (js-ts-defs-find-definition scope "x" outer-usage-pos)))
+        (should (= result outer-def-pos))))))
 
 (provide 'js-ts-defs-test)
 
