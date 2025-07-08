@@ -252,6 +252,59 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-class-and-method-scope ()
+  "Test that classes are added to block scope and methods create function scopes."
+  (with-temp-buffer
+    (insert "class MyClass {\n")
+    (insert "  constructor(param1) {\n")
+    (insert "    this.value = param1;\n")
+    (insert "  }\n")
+    (insert "  \n")
+    (insert "  myMethod(param2) {\n")
+    (insert "    let localVar = param2;\n")
+    (insert "    return localVar;\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 148     ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "MyClass" 7 variables) ; position of "MyClass"
+                               variables)
+                  :children (list
+                             ;; Build expected constructor method scope
+                             (list :type "function"
+                                   :start 19 ; start of constructor
+                                   :end 69   ; end of constructor
+                                   ;; Constructor parameters
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "param1" 31 variables) ; position of "param1"
+                                                variables)
+                                   :children '())
+                             ;; Build expected myMethod scope
+                             (list :type "function"
+                                   :start 75 ; start of myMethod
+                                   :end 145  ; end of myMethod
+                                   ;; Method parameters and local variables
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "param2" 84 variables)    ; position of "param2"
+                                                (puthash "localVar" 102 variables) ; position of "localVar"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
