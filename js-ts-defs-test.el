@@ -1161,6 +1161,44 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-duplicate-var-declarations ()
+  "Test that when a var is declared twice in the same scope, only the first declaration counts."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  var x = 1;\n")
+    (insert "  var x = 2;\n")
+    (insert "  return x;\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 63      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 62   ; end of function
+                                   ;; Only first declaration should be recorded
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "x" 29 variables) ; position of first "x"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
