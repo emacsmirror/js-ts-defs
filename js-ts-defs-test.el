@@ -68,6 +68,74 @@
       (should (< (point) usage-pos))  ; Should jump backward to parameter
       (should (looking-at "name")))))
 
+(ert-deftest js-ts-defs-test-no-tree-sitter-parser ()
+  "Test error when no tree-sitter parser is available."
+  (with-temp-buffer
+    (insert "let x = 42;")
+    ;; Don't enable js-ts-mode, so no parser will be available
+    (let ((err (should-error (js-ts-defs-jump-to-definition)
+                             :type 'user-error)))
+      (should (string= (cadr err) "No tree-sitter parser available")))))
+
+(ert-deftest js-ts-defs-test-no-identifier-at-point ()
+  "Test error when point is not on an identifier."
+  (with-temp-buffer
+    (insert "let x = 42;")
+    (js-ts-mode)
+    ;; Position point on the '=' character
+    (goto-char (point-min))
+    (search-forward "=")
+    (backward-char)
+    (let ((err (should-error (js-ts-defs-jump-to-definition)
+                             :type 'user-error)))
+      (should (string= (cadr err) "No identifier at point")))))
+
+(ert-deftest js-ts-defs-test-definition-not-found ()
+  "Test error when definition cannot be found for an identifier."
+  (with-temp-buffer
+    (insert "console.log(notDefined);")
+    (js-ts-mode)
+    ;; Position point on 'notDefined'
+    (goto-char (point-min))
+    (search-forward "notDefined")
+    (backward-word)
+    (let ((err (should-error (js-ts-defs-jump-to-definition)
+                             :type 'user-error)))
+      (should (string= (cadr err)
+                       (format-message "Definition not found for `notDefined'"))))))
+
+(ert-deftest js-ts-defs-test-arguments-dynamic-scope ()
+  "Test error for 'arguments' identifier in non-arrow function."
+  (with-temp-buffer
+    (insert "function test() {\n")
+    (insert "  console.log(arguments);\n")
+    (insert "}")
+    (js-ts-mode)
+    ;; Position point on 'arguments'
+    (goto-char (point-min))
+    (search-forward "arguments")
+    (backward-word)
+    (let ((err (should-error (js-ts-defs-jump-to-definition)
+                             :type 'user-error)))
+      (should (string= (cadr err)
+                       (format-message "`arguments' has dynamic scope"))))))
+
+(ert-deftest js-ts-defs-test-arguments-in-arrow-function ()
+  "Test that 'arguments' in arrow function gives definition not found error."
+  (with-temp-buffer
+    (insert "const test = () => {\n")
+    (insert "  console.log(arguments);\n")
+    (insert "};")
+    (js-ts-mode)
+    ;; Position point on 'arguments'
+    (goto-char (point-min))
+    (search-forward "arguments")
+    (backward-word)
+    (let ((err (should-error (js-ts-defs-jump-to-definition)
+                             :type 'user-error)))
+      (should (string= (cadr err)
+                       (format-message "Definition not found for `arguments'"))))))
+
 (provide 'js-ts-defs-test)
 
 ;;; js-ts-defs-test.el ends here
