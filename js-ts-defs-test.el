@@ -1145,8 +1145,7 @@ Like `equal' but also compares hash table contents."
                                variables)
                   :children (list
                              ;; Build expected arrow function scope
-                             (list :is-arrow t ; mark as arrow function
-                                   :type "function"
+                             (list :type "function"
                                    :start 17   ; start of arrow function
                                    :end 93     ; end of arrow function
                                    ;; Arrow function parameters and local variables
@@ -1155,7 +1154,9 @@ Like `equal' but also compares hash table contents."
                                                 (puthash "param2" 26 variables)   ; position of "param2"
                                                 (puthash "localVar" 45 variables) ; position of "localVar"
                                                 variables)
-                                   :children '())))))
+                                   :children '()
+                                   ;; Mark as arrow function
+                                   :is-arrow t)))))
 
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))

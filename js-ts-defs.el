@@ -71,7 +71,7 @@ If IS-ARROW is non-nil, marks this function scope as an arrow function."
                      :variables (make-hash-table :test 'equal)
                      :children '())))
     (when is-arrow
-      (setf (plist-get scope :is-arrow) t))
+      (setq scope (append scope (list :is-arrow t))))
     scope))
 
 (defun js-ts-defs--process-node (node function-scope block-scope)
