@@ -112,6 +112,60 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-anonymous-function-expression-scope ()
+  "Test that anonymous function expressions create proper scopes."
+  (with-temp-buffer
+    (insert "var fn1 = function(param1) {\n")
+    (insert "  var localVar1 = param1;\n")
+    (insert "};\n")
+    (insert "\n")
+    (insert "var fn2 = (param2) => {\n")
+    (insert "  let localVar2 = param2;\n")
+    (insert "};\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 113     ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "fn1" 5 variables)  ; position of "fn1"
+                               (puthash "fn2" 64 variables) ; position of "fn2"
+                               variables)
+                  :children (list
+                             ;; Build expected anonymous function expression scope
+                             (list :type "function"
+                                   :start 11 ; start of function expression
+                                   :end 57   ; end of function expression
+                                   ;; Build expected function variables hash table
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "param1" 20 variables)    ; position of "param1"
+                                                (puthash "localVar1" 36 variables) ; position of "localVar1"
+                                                variables)
+                                   :children '())
+                             ;; Build expected arrow function scope
+                             (list :type "function"
+                                   :start 70 ; start of arrow function
+                                   :end 111  ; end of arrow function
+                                   ;; Build expected function variables hash table
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "param2" 71 variables)    ; position of "param2"
+                                                (puthash "localVar2" 90 variables) ; position of "localVar2"
+                                                variables)
+                                   :children '()
+                                   ;; Mark as arrow function
+                                   :is-arrow t)))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-named-function-expression-scope ()
   "Test that named functions are available in function expression scope."
   (with-temp-buffer
