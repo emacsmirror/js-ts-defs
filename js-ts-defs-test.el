@@ -305,6 +305,192 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-for-loop-var-scope ()
+  "Test that var declarations in for loop are hoisted to function scope."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  for (var i = 0; i < 10; i++) {\n")
+    (insert "    var innerVar = i;\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 84      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 83   ; end of function
+                                   ;; var declarations should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "i" 34 variables)        ; position of "i"
+                                                (puthash "innerVar" 64 variables) ; position of "innerVar"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-for-loop-let-scope ()
+  "Test that let declarations in for loop create a new for scope."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  for (let i = 0; i < 10; i++) {\n")
+    (insert "    let innerVar = i;\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 84      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 83   ; end of function
+                                   ;; Function scope should be empty
+                                   :variables (make-hash-table :test 'equal)
+                                   :children (list
+                                              ;; Build expected for scope
+                                              (list :type "for"
+                                                    :start 25 ; start of for statement
+                                                    :end 81   ; end of for statement
+                                                    ;; let declarations should be in for scope
+                                                    :variables (let ((variables (make-hash-table :test 'equal)))
+                                                                 (puthash "i" 34 variables)        ; position of "i"
+                                                                 variables)
+                                                    :children (list
+                                                               ;; Build expected block scope
+                                                               (list :type "block"
+                                                                     :start 54 ; start of block
+                                                                     :end 81   ; end of block
+                                                                     ;; let declarations should be in for scope
+                                                                     :variables (let ((variables (make-hash-table :test 'equal)))
+                                                                                  (puthash "innerVar" 64 variables) ; position of "innerVar"
+                                                                                  variables)
+                                                                     :children '())))))))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-for-in-loop-var-scope ()
+  "Test that var declarations in for-in loop are hoisted to function scope."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  for (var key in obj) {\n")
+    (insert "    var value = obj[key];\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 80      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 79   ; end of function
+                                   ;; var declarations should be in function scope
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "key" 34 variables)   ; position of "key"
+                                                (puthash "value" 56 variables) ; position of "value"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-for-in-loop-let-scope ()
+  "Test that let declarations in for-in loop create a new for scope."
+  (with-temp-buffer
+    (insert "function testFunc() {\n")
+    (insert "  for (let key in obj) {\n")
+    (insert "    let value = obj[key];\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 80      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "testFunc" 10 variables) ; position of "testFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected function scope
+                             (list :type "function"
+                                   :start 1  ; start of function
+                                   :end 79   ; end of function
+                                   ;; Function scope should be empty
+                                   :variables (make-hash-table :test 'equal)
+                                   :children (list
+                                              ;; Build expected for scope
+                                              (list :type "for"
+                                                    :start 25 ; start of for-in statement
+                                                    :end 77   ; end of for-in statement
+                                                    ;; let declarations should be in for scope
+                                                    :variables (let ((variables (make-hash-table :test 'equal)))
+                                                                 (puthash "key" 34 variables)   ; position of "key"
+                                                                 variables)
+                                                    :children (list
+                                                               ;; Build expected block scope
+                                                               (list :type "block"
+                                                                     :start 46 ; start of block
+                                                                     :end 77   ; end of block
+                                                                     ;; let declarations should be in for scope
+                                                                     :variables (let ((variables (make-hash-table :test 'equal)))
+                                                                                  (puthash "value" 56 variables) ; position of "value"
+                                                                                  variables)
+                                                                     :children '())))))))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
