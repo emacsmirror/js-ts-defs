@@ -61,6 +61,9 @@ Returns a nested scope structure with variable definitions."
 
 (defun js-ts-defs--build-scope (scope-type start-pos end-pos &optional is-arrow)
   "Build a scope structure of SCOPE-TYPE with START-POS and END-POS.
+SCOPE-TYPE is the type of scope to create.
+START-POS is the starting position of the scope.
+END-POS is the ending position of the scope.
 If IS-ARROW is non-nil, marks this function scope as an arrow function."
   (let ((scope (list :type scope-type
                      :start start-pos
@@ -121,7 +124,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
       (js-ts-defs--process-children node function-scope block-scope)))))
 
 (defun js-ts-defs--process-function (node _parent-function-scope parent-block-scope)
-  "Process a function NODE, creating a new child scope."
+  "Process a function NODE, creating a new child scope.
+NODE is the function node to process.
+_PARENT-FUNCTION-SCOPE is the parent function scope (unused).
+PARENT-BLOCK-SCOPE is the parent block scope."
   (let* ((node-type (treesit-node-type node))
          (is-arrow (string= node-type "arrow_function"))
          (function-scope (js-ts-defs--build-scope "function"
@@ -163,7 +169,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
           (append (plist-get parent-block-scope :children) (list function-scope)))))
 
 (defun js-ts-defs--process-variable-declaration (node function-scope block-scope)
-  "Process a variable declaration NODE (var) and add variables to FUNCTION-SCOPE."
+  "Process a variable declaration NODE (var) and add variables to FUNCTION-SCOPE.
+NODE is the variable declaration node to process.
+FUNCTION-SCOPE is the function scope to add variables to.
+BLOCK-SCOPE is the current block scope."
   (let ((declarators (treesit-node-children node)))
     (dolist (child declarators)
       (when (string= (treesit-node-type child) "variable_declarator")
@@ -178,7 +187,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
             (js-ts-defs--process-node value function-scope block-scope)))))))
 
 (defun js-ts-defs--process-lexical-declaration (node function-scope block-scope)
-  "Process a lexical declaration NODE (let/const) and add variables to BLOCK-SCOPE."
+  "Process a lexical declaration NODE (let/const) and add variables to BLOCK-SCOPE.
+NODE is the lexical declaration node to process.
+FUNCTION-SCOPE is the current function scope.
+BLOCK-SCOPE is the block scope to add variables to."
   (let ((declarators (treesit-node-children node)))
     (dolist (child declarators)
       (when (string= (treesit-node-type child) "variable_declarator")
@@ -213,7 +225,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
       (puthash name position variables))))
 
 (defun js-ts-defs--process-statement-block (node function-scope block-scope)
-  "Process a statement block NODE, creating a block scope if needed."
+  "Process a statement block NODE, creating a block scope if needed.
+NODE is the statement block node to process.
+FUNCTION-SCOPE is the current function scope.
+BLOCK-SCOPE is the current block scope."
   (let ((children (treesit-node-children node))
         (has-lexical-declaration nil))
 
@@ -237,7 +252,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
         (js-ts-defs--process-node child function-scope block-scope)))))
 
 (defun js-ts-defs--process-catch-clause (node _function-scope block-scope)
-  "Process a catch clause NODE, creating a new block scope."
+  "Process a catch clause NODE, creating a new block scope.
+NODE is the catch clause node to process.
+_FUNCTION-SCOPE is the current function scope (unused).
+BLOCK-SCOPE is the current block scope."
   (let ((parameter (treesit-node-child-by-field-name node "parameter"))
         (body (treesit-node-child-by-field-name node "body"))
         (catch-scope (js-ts-defs--build-scope "block"
@@ -264,7 +282,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
           (append (plist-get block-scope :children) (list catch-scope)))))
 
 (defun js-ts-defs--process-for-statement (node function-scope block-scope)
-  "Process a for statement NODE, creating a block scope if needed."
+  "Process a for statement NODE, creating a block scope if needed.
+NODE is the for statement node to process.
+FUNCTION-SCOPE is the current function scope.
+BLOCK-SCOPE is the current block scope."
   (let ((initializer (treesit-node-child-by-field-name node "initializer"))
         (condition (treesit-node-child-by-field-name node "condition"))
         (update (treesit-node-child-by-field-name node "update"))
@@ -307,7 +328,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
           (js-ts-defs--process-node body function-scope block-scope))))))
 
 (defun js-ts-defs--process-for-in-statement (node function-scope block-scope)
-  "Process a for in statement NODE, creating a block scope if needed."
+  "Process a for in statement NODE, creating a block scope if needed.
+NODE is the for in statement node to process.
+FUNCTION-SCOPE is the current function scope.
+BLOCK-SCOPE is the current block scope."
   (let ((kind (treesit-node-child-by-field-name node "kind"))
         (left (treesit-node-child-by-field-name node "left"))
         (right (treesit-node-child-by-field-name node "right"))
@@ -359,7 +383,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
           (js-ts-defs--process-node body function-scope block-scope))))))
 
 (defun js-ts-defs--process-class-declaration (node function-scope block-scope)
-  "Process a class declaration NODE, adding the class name to block scope."
+  "Process a class declaration NODE, adding the class name to block scope.
+NODE is the class declaration node to process.
+FUNCTION-SCOPE is the current function scope.
+BLOCK-SCOPE is the block scope to add the class name to."
   (let ((name-node (treesit-node-child-by-field-name node "name")))
     ;; Add class name to block scope
     (when (and name-node (string= (treesit-node-type name-node) "identifier"))
@@ -371,7 +398,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
   (js-ts-defs--process-children node function-scope block-scope))
 
 (defun js-ts-defs--process-import-statement (node function-scope block-scope)
-  "Process an import statement NODE, adding imports to block scope."
+  "Process an import statement NODE, adding imports to block scope.
+NODE is the import statement node to process.
+FUNCTION-SCOPE is the current function scope.
+BLOCK-SCOPE is the block scope to add imports to."
   (let ((import-clause (treesit-node-child node 1)))
     (when import-clause
       (js-ts-defs--process-import-clause import-clause block-scope)))
@@ -380,7 +410,9 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
   (js-ts-defs--process-children node function-scope block-scope))
 
 (defun js-ts-defs--process-import-clause (node block-scope)
-  "Process an import clause NODE, adding imports to block scope."
+  "Process an import clause NODE, adding imports to BLOCK-SCOPE.
+NODE is the import clause node to process.
+BLOCK-SCOPE is the block scope to add imports to."
   (let ((children (treesit-node-children node)))
     (dolist (child children)
       (let ((node-type (treesit-node-type child)))
@@ -470,7 +502,10 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
      (t '()))))
 
 (defun js-ts-defs--process-children (node function-scope block-scope)
-  "Process all children of NODE in the current scopes."
+  "Process all children of NODE in the current scopes.
+NODE is the parent node whose children to process.
+FUNCTION-SCOPE is the current function scope.
+BLOCK-SCOPE is the current block scope."
   (let ((children (treesit-node-children node)))
     (dolist (child children)
       (js-ts-defs--process-node child function-scope block-scope))))
@@ -494,6 +529,8 @@ Searches from innermost to outermost scope."
 
 (defun js-ts-defs--find-dynamic-function-scope (scope position)
   "Find if POSITION is within a non-arrow function scope in SCOPE.
+SCOPE is the scope structure to search within.
+POSITION is the buffer position to check.
 Returns t if inside a non-arrow function scope, nil otherwise."
   (catch 'found
     ;; Check if we're inside any child scopes
@@ -515,11 +552,12 @@ Returns t if inside a non-arrow function scope, nil otherwise."
       t)))
 
 (defun js-ts-defs--invalidate-cache (&rest _)
-  "Invalidate the cached scope structure."
+  "Invalidate the cached scope structure.
+Argument _ is ignored (used for tree-sitter callback compatibility)."
   (setq js-ts-defs--cached-scope nil))
 
 (defun js-ts-defs--setup-change-hook ()
-  "Setup tree-sitter change hook to invalidate cache when syntax tree changes."
+  "Setup tree-sitter change hook to invalidate cache on syntax tree change."
   (unless js-ts-defs--change-hook-setup
     (when-let ((parser (car (treesit-parser-list))))
       (treesit-parser-add-notifier parser #'js-ts-defs--invalidate-cache)
