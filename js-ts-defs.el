@@ -49,6 +49,25 @@
 (defvar-local js-ts-defs--change-hook-setup nil
   "Buffer-local flag indicating if tree-sitter change hook is setup.")
 
+;; Grammar compatibility detection
+(defvar js-ts-defs--function-expression-node-type nil
+  "Cached result of function expression node type detection.
+Will be \"function_expression\" for newer grammars, \"function\" for older ones.")
+
+(defun js-ts-defs--detect-function-expression-node-type ()
+  "Detect the correct node type for function expressions.
+Return \"function_expression\" for newer grammars (0.20.2+).
+Return \"function\" for older ones.
+Caches the result in `js-ts-defs--function-expression-node-type'."
+  (unless js-ts-defs--function-expression-node-type
+    (setq js-ts-defs--function-expression-node-type
+          (condition-case nil
+              (progn
+                (treesit-query-capture 'javascript '((function_expression) @cap))
+                "function_expression")
+            (error "function"))))
+  js-ts-defs--function-expression-node-type)
+
 (defun js-ts-defs-build-scope (root-node)
   "Extract JavaScript definitions from ROOT-NODE using tree-sitter.
 ROOT-NODE should be a tree-sitter root node.
@@ -82,7 +101,7 @@ BLOCK-SCOPE is the current block scope for lexical declarations."
     (cond
      ;; Function declarations create new scopes
      ((or (string= node-type "function_declaration")
-          (string= node-type "function_expression")
+          (string= node-type (js-ts-defs--detect-function-expression-node-type))
           (string= node-type "arrow_function")
           (string= node-type "method_definition"))
       (js-ts-defs--process-function node function-scope block-scope))
@@ -146,7 +165,7 @@ PARENT-BLOCK-SCOPE is the parent block scope."
            ((string= node-type "function_declaration")
             (js-ts-defs--add-variable parent-block-scope name pos))
            ;; For function_expression, add name to function's own scope
-           ((string= node-type "function_expression")
+           ((string= node-type (js-ts-defs--detect-function-expression-node-type))
             (js-ts-defs--add-variable function-scope name pos))))))
 
     ;; Add parameters to the function scope
