@@ -1120,6 +1120,46 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-arrow-function-scope ()
+  "Test that arrow functions create proper scopes with parameters."
+  (with-temp-buffer
+    (insert "const myArrow = (param1, param2) => {\n")
+    (insert "  let localVar = param1 + param2;\n")
+    (insert "  return localVar;\n")
+    (insert "};\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 95      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "myArrow" 7 variables) ; position of "myArrow"
+                               variables)
+                  :children (list
+                             ;; Build expected arrow function scope
+                             (list :is-arrow t ; mark as arrow function
+                                   :type "function"
+                                   :start 17   ; start of arrow function
+                                   :end 93     ; end of arrow function
+                                   ;; Arrow function parameters and local variables
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "param1" 18 variables)   ; position of "param1"
+                                                (puthash "param2" 26 variables)   ; position of "param2"
+                                                (puthash "localVar" 45 variables) ; position of "localVar"
+                                                variables)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
