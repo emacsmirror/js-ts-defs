@@ -1268,6 +1268,68 @@ Like `equal' but also compares hash table contents."
       (should (string= (cadr err)
                        (format-message "Definition not found for `arguments'"))))))
 
+(ert-deftest js-ts-defs-test-find-definition ()
+  "Test js-ts-defs-find-definition function directly."
+  (with-temp-buffer
+    (insert "var globalVar = 1;\n")
+    (insert "function myFunc(param) {\n")
+    (insert "  let localVar = param + globalVar;\n")
+    (insert "  {\n")
+    (insert "    const blockVar = localVar * 2;\n")
+    (insert "    return blockVar;\n")
+    (insert "  }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node)))
+
+      ;; Test 1: Find global variable from global scope
+      (let ((global-pos 5)
+            (result (js-ts-defs-find-definition scope "globalVar" 1)))
+        (should (= result global-pos)))
+
+      ;; Test 2: Find function from global scope
+      (let ((func-pos 29)
+            (result (js-ts-defs-find-definition scope "myFunc" 1)))
+        (should (= result func-pos)))
+
+      ;; Test 3: Find parameter from within function
+      (let* ((param-pos 36)
+             (usage-pos 62)
+             (result (js-ts-defs-find-definition scope "param" usage-pos)))
+        (should (= result param-pos)))
+
+      ;; Test 4: Find local variable from within function
+      (let* ((local-pos 51)
+             (usage-pos 106)
+             (result (js-ts-defs-find-definition scope "localVar" usage-pos)))
+        (should (= result local-pos)))
+
+      ;; Test 5: Find block-scoped variable from within block
+      (let* ((block-pos 95)
+             (usage-pos 131)
+             (result (js-ts-defs-find-definition scope "blockVar" usage-pos)))
+        (should (= result block-pos)))
+
+      ;; Test 6: Find global variable from within nested scope
+      (let* ((global-pos 5)
+             (usage-pos 70)
+             (result (js-ts-defs-find-definition scope "globalVar" usage-pos)))
+        (should (= result global-pos)))
+
+      ;; Test 7: Variable not found should return nil
+      (let ((result (js-ts-defs-find-definition scope "nonExistent" 1)))
+        (should (null result)))
+
+      ;; Test 8: Block variable not accessible from outside block
+      (let* ((outside-pos 144)
+             (result (js-ts-defs-find-definition scope "blockVar" outside-pos)))
+        (should (null result))))))
+
 (provide 'js-ts-defs-test)
 
 ;;; js-ts-defs-test.el ends here
