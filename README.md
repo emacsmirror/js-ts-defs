@@ -14,6 +14,44 @@ This package provides `js-ts-defs-jump-to-definition` which jumps to the definit
 - Works with arrow functions and regular functions
 - Handles block scoping and lexical declarations
 
+## Prerequisites
+
+Before using this package, you need to:
+
+1. Install the tree-sitter JavaScript grammar:
+
+   a. First, set up the language source by adding this to your configuration:
+   ```elisp
+   ;; For Emacs 29.x, use version 0.20.1
+   (add-to-list 'treesit-language-source-alist
+                '(javascript "https://github.com/tree-sitter/tree-sitter-javascript" "v0.20.1"))
+
+   ;; For Emacs 30.x, use version 0.23.1
+   (add-to-list 'treesit-language-source-alist
+                '(javascript "https://github.com/tree-sitter/tree-sitter-javascript" "v0.23.1"))
+   ```
+
+   b. Then install the grammar:
+   ```elisp
+   M-x treesit-install-language-grammar RET javascript RET
+   ```
+
+2. Set up `js-ts-mode`:
+
+   a. Open JavaScript files in the new tree-sitter-enabled major mode, `js-ts-mode`, by adding this to your configuration:
+   ```elisp
+   (add-to-list 'major-mode-remap-alist '(javascript-mode . js-ts-mode))
+   ```
+
+   b. If you have any existing `js-mode-hook` configurations, migrate them to `js-ts-mode-hook`:
+   ```elisp
+   ;; Change this:
+   (add-hook 'js-mode-hook ...)
+
+   ;; To this:
+   (add-hook 'js-ts-mode-hook ...)
+   ```
+
 ## Usage
 
 Call `M-x js-ts-defs-jump-to-definition` to jump to the definition of the identifier at point.
