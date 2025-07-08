@@ -851,6 +851,275 @@ Like `equal' but also compares hash table contents."
       ;; Assert that the built scope matches the expected structure
       (should (js-ts-defs--deep-equal scope expected-scope)))))
 
+(ert-deftest js-ts-defs-test-default-import ()
+  "Test that default imports are added to scope correctly."
+  (with-temp-buffer
+    (insert "import React from 'react';\n")
+    (insert "import { useState } from 'react';\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 62      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "React" 8 variables)     ; position of "React"
+                               (puthash "useState" 37 variables) ; position of "useState"
+                               variables)
+                  :children '())))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-named-imports ()
+  "Test that named imports are added to scope correctly."
+  (with-temp-buffer
+    (insert "import { Component, Fragment } from 'react';\n")
+    (insert "import { render as renderDOM } from 'react-dom';\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 95      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "Component" 10 variables) ; position of "Component"
+                               (puthash "Fragment" 21 variables)  ; position of "Fragment"
+                               (puthash "renderDOM" 65 variables) ; position of "renderDOM"
+                               variables)
+                  :children '())))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-namespace-import ()
+  "Test that namespace imports are added to scope correctly."
+  (with-temp-buffer
+    (insert "import * as React from 'react';\n")
+    (insert "import * as utils from './utils';\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 67      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "React" 13 variables) ; position of "React"
+                               (puthash "utils" 45 variables) ; position of "utils"
+                               variables)
+                  :children '())))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-mixed-imports ()
+  "Test that mixed import types work correctly together."
+  (with-temp-buffer
+    (insert "import React, { useState, useEffect as useEff } from 'react';\n")
+    (insert "import * as lodash from 'lodash';\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 97      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "React" 8 variables)    ; position of "React"
+                               (puthash "useState" 17 variables) ; position of "useState"
+                               (puthash "useEff" 40 variables)  ; position of "useEff"
+                               (puthash "lodash" 75 variables)  ; position of "lodash"
+                               variables)
+                  :children '())))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-export-function-declaration ()
+  "Test that exported function declarations are added to scope."
+  (with-temp-buffer
+    (insert "export function myFunction(param) {\n")
+    (insert "  return param * 2;\n")
+    (insert "}\n")
+    (insert "\n")
+    (insert "export default function defaultFunc() {\n")
+    (insert "  return 'default';\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 122     ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "myFunction" 17 variables)   ; position of "myFunction"
+                               (puthash "defaultFunc" 84 variables) ; position of "defaultFunc"
+                               variables)
+                  :children (list
+                             ;; Build expected myFunction scope
+                             (list :type "function"
+                                   :start 8  ; start of myFunction
+                                   :end 58   ; end of myFunction
+                                   ;; Function parameters
+                                   :variables (let ((variables (make-hash-table :test 'equal)))
+                                                (puthash "param" 28 variables) ; position of "param"
+                                                variables)
+                                   :children '())
+                             ;; Build expected defaultFunc scope
+                             (list :type "function"
+                                   :start 75 ; start of defaultFunc
+                                   :end 121  ; end of defaultFunc
+                                   ;; Function has no parameters
+                                   :variables (make-hash-table :test 'equal)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-export-variable-declaration ()
+  "Test that exported variable declarations are added to scope."
+  (with-temp-buffer
+    (insert "export var exportedVar = 'hello';\n")
+    (insert "export let exportedLet = 42;\n")
+    (insert "export const exportedConst = true;\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 99      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "exportedVar" 12 variables)   ; position of "exportedVar"
+                               (puthash "exportedLet" 46 variables)   ; position of "exportedLet"
+                               (puthash "exportedConst" 77 variables) ; position of "exportedConst"
+                               variables)
+                  :children '())))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-export-class-declaration ()
+  "Test that exported class declarations are added to scope."
+  (with-temp-buffer
+    (insert "export class MyClass {\n")
+    (insert "  constructor() {}\n")
+    (insert "}\n")
+    (insert "\n")
+    (insert "export default class DefaultClass {\n")
+    (insert "  method() { return 'test'; }\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 114     ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "MyClass" 14 variables)      ; position of "MyClass"
+                               (puthash "DefaultClass" 67 variables) ; position of "DefaultClass"
+                               variables)
+                  :children (list
+                             ;; Build expected constructor scope
+                             (list :type "function"
+                                   :start 26 ; start of constructor
+                                   :end 42   ; end of constructor
+                                   ;; Constructor has no parameters
+                                   :variables (make-hash-table :test 'equal)
+                                   :children '())
+                             ;; Build expected method scope
+                             (list :type "function"
+                                   :start 84 ; start of method
+                                   :end 111  ; end of method
+                                   ;; Method has no parameters
+                                   :variables (make-hash-table :test 'equal)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
+(ert-deftest js-ts-defs-test-export-named-specifiers ()
+  "Test that export specifiers reference existing declarations."
+  (with-temp-buffer
+    (insert "function helper() { return 'help'; }\n")
+    (insert "const value = 42;\n")
+    (insert "export { helper, value as exportedValue };\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           (expected-scope
+            ;; Build expected global scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 99      ; end of buffer
+                  ;; Build expected global variables hash table
+                  :variables (let ((variables (make-hash-table :test 'equal)))
+                               (puthash "helper" 10 variables) ; position of "helper"
+                               (puthash "value" 44 variables)  ; position of "value"
+                               variables)
+                  :children (list
+                             ;; Build expected helper function scope
+                             (list :type "function"
+                                   :start 1  ; start of helper function
+                                   :end 37   ; end of helper function
+                                   ;; Function has no parameters
+                                   :variables (make-hash-table :test 'equal)
+                                   :children '())))))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
