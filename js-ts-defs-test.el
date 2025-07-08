@@ -28,6 +28,98 @@
 (require 'ert)
 (require 'js-ts-defs)
 
+(defun js-ts-defs--deep-equal (obj1 obj2)
+  "Deep equality comparison that handles hash tables.
+Compare OBJ1 with OBJ2.
+Like `equal' but also compares hash table contents."
+  (cond
+   ;; Both are hash tables
+   ((and (hash-table-p obj1) (hash-table-p obj2))
+    (and (= (hash-table-count obj1) (hash-table-count obj2))
+         (eq (hash-table-test obj1) (hash-table-test obj2))
+         (catch 'not-equal
+           (maphash (lambda (key value1)
+                      (let ((value2 (gethash key obj2 'js-ts-defs--not-found)))
+                        (when (or (eq value2 'js-ts-defs--not-found)
+                                  (not (js-ts-defs--deep-equal value1 value2)))
+                          (throw 'not-equal nil))))
+                    obj1)
+           t)))
+
+   ;; One is hash table, other is not
+   ((or (hash-table-p obj1) (hash-table-p obj2))
+    nil)
+
+   ;; Both are lists
+   ((and (listp obj1) (listp obj2))
+    (and (= (length obj1) (length obj2))
+         (catch 'not-equal
+           (while (and obj1 obj2)
+             (unless (js-ts-defs--deep-equal (car obj1) (car obj2))
+               (throw 'not-equal nil))
+             (setq obj1 (cdr obj1)
+                   obj2 (cdr obj2)))
+           t)))
+
+   ;; One is list, other is not
+   ((or (listp obj1) (listp obj2))
+    nil)
+
+   ;; Use regular equal for everything else
+   (t
+    (equal obj1 obj2))))
+
+(ert-deftest js-ts-defs-test-build-scope ()
+  "Test building scope object from buffer with var/let/const declarations."
+  (with-temp-buffer
+    (insert "var globalVar = 1;\n")
+    (insert "let globalLet = 2;\n")
+    (insert "function myFunc(param1) {\n")
+    (insert "  var localVar = 3;\n")
+    (insert "  let localLet = 4;\n")
+    (insert "}\n")
+
+    ;; Enable js-ts-mode to get tree-sitter parser
+    (js-ts-mode)
+
+    ;; Build the scope
+    (let* ((root-node (treesit-buffer-root-node))
+           (scope (js-ts-defs-build-scope root-node))
+           ;; Create expected scope structure manually
+           (expected-variables (make-hash-table :test 'equal))
+           (expected-func-variables (make-hash-table :test 'equal))
+           (expected-func-scope nil)
+           (expected-scope nil))
+
+      ;; Build expected global variables hash table
+      (puthash "globalVar" 5 expected-variables)  ; position of "globalVar"
+      (puthash "globalLet" 24 expected-variables) ; position of "globalLet"
+      (puthash "myFunc" 48 expected-variables)    ; position of "myFunc"
+
+      ;; Build expected function variables hash table
+      (puthash "param1" 55 expected-func-variables) ; position of "param1"
+      (puthash "localVar" 71 expected-func-variables) ; position of "localVar"
+      (puthash "localLet" 91 expected-func-variables) ; position of "localLet"
+
+      ;; Build expected function scope
+      (setq expected-func-scope
+            (list :type "function"
+                  :start 39  ; start of function
+                  :end 106   ; end of function
+                  :variables expected-func-variables
+                  :children '()))
+
+      ;; Build expected global scope
+      (setq expected-scope
+            (list :type "program"
+                  :start 1     ; start of buffer
+                  :end 107     ; end of buffer
+                  :variables expected-variables
+                  :children (list expected-func-scope)))
+
+      ;; Assert that the built scope matches the expected structure
+      (should (js-ts-defs--deep-equal scope expected-scope)))))
+
 (ert-deftest js-ts-defs-test-jump-to-definition ()
   "Test jumping to variable and function definitions."
   (with-temp-buffer
