@@ -523,7 +523,7 @@ Searches from innermost to outermost scope."
     ;; First check if we're inside any child scopes
     (dolist (child-scope (plist-get scope :children))
       (when (and (>= position (plist-get child-scope :start))
-                 (<= position (plist-get child-scope :end)))
+                 (< position (plist-get child-scope :end)))
         (let ((result (js-ts-defs-find-definition child-scope identifier position)))
           (when result
             (throw 'found result)))))
@@ -541,7 +541,7 @@ Returns t if inside a non-arrow function scope, nil otherwise."
     ;; Check if we're inside any child scopes
     (dolist (child-scope (plist-get scope :children))
       (when (and (>= position (plist-get child-scope :start))
-                 (<= position (plist-get child-scope :end)))
+                 (< position (plist-get child-scope :end)))
         ;; If this child scope is a non-arrow function, we found one
         (when (and (string= (plist-get child-scope :type) "function")
                    (not (plist-get child-scope :is-arrow)))
