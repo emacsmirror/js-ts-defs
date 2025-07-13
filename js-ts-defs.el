@@ -37,8 +37,9 @@
 ;; Prerequisites:
 ;;
 ;; 1. Install JavaScript tree-sitter grammar:
-;;    (add-to-list 'treesit-language-source-alist
-;;                 '(javascript "https://github.com/tree-sitter/tree-sitter-javascript" "v0.20.1"))
+;;    (add-to-list
+;;     'treesit-language-source-alist
+;;     '(javascript "https://github.com/tree-sitter/tree-sitter-javascript" "v0.20.1"))
 ;;    M-x treesit-install-language-grammar RET javascript RET
 ;;
 ;; 2. Enable `js-ts-mode' for JavaScript files:
