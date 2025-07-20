@@ -1,6 +1,6 @@
 # js-ts-defs
 
-[![CI](https://github.com/jacksonrayhamilton/js-ts-defs/actions/workflows/test.yml/badge.svg)](https://github.com/jacksonrayhamilton/js-ts-defs/actions/workflows/test.yml)
+[![MELPA](https://melpa.org/packages/js-ts-defs-badge.svg)](https://melpa.org/#/js-ts-defs) [![CI](https://github.com/jacksonrayhamilton/js-ts-defs/actions/workflows/test.yml/badge.svg)](https://github.com/jacksonrayhamilton/js-ts-defs/actions/workflows/test.yml)
 
 Find JavaScript variable definitions using tree-sitter.
 
